@@ -1,0 +1,18 @@
+{
+  "id": "telegram",
+  "name": "Telegram",
+  "fields": [
+    { "id": "token", "label": "Токен бота", "secret": true },
+    { "id": "chat", "label": "ID чата" }
+  ],
+  "actions": [{
+    "id": "send",
+    "name": "Отправить сообщение",
+    "needsRest": true,
+    "request": {
+      "method": "POST",
+      "url": "https://api.telegram.org/bot{{field.token}}/sendMessage",
+      "body": { "chat_id": "{{field.chat}}", "text": "{{rest}}" }
+    }
+  }]
+}

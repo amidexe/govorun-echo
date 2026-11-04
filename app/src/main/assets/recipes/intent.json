@@ -1,0 +1,18 @@
+{
+  "id": "intent",
+  "name": "Приложение на телефоне (Intent)",
+  "fields": [],
+  "actions": [{
+    "id": "broadcast",
+    "name": "Передать приложению",
+    "fields": [
+      { "id": "package", "label": "Пакет приложения", "hint": "Tasker: net.dinglisch.android.taskerm" },
+      { "id": "action", "label": "Действие (необязательно)", "hint": "com.govorun.echo.action.COMMAND" }
+    ],
+    "intent": {
+      "action": "{{action.action}}",
+      "package": "{{action.package}}",
+      "extras": { "command": "{{command}}", "trigger": "{{trigger}}", "rest": "{{rest}}", "text": "{{text}}", "time": "{{time}}", "note_id": "{{note_id}}" }
+    }
+  }]
+}

@@ -1,0 +1,86 @@
+GOVORUN ECHO BRAND NOTICE / УВЕДОМЛЕНИЕ О БРЕНДЕ «ГОВОРУН ЭХО»
+
+Code license / Лицензия на код
+
+Except for the Brand Assets identified below and third-party components under
+their own notices, the source code in this repository is licensed under the GNU
+General Public License, version 3 or (at your option) any later version
+(GPL-3.0-or-later). The text of version 3 is in LICENSE. Third-party components
+and their licenses are listed in app/src/main/assets/licenses.txt and in the app
+(Settings, About).
+
+За исключением перечисленных ниже брендовых материалов и сторонних компонентов
+с собственными уведомлениями, исходный код этого репозитория распространяется
+по GNU General Public License версии 3 или, по вашему выбору, любой более
+поздней версии (GPL-3.0-or-later). Текст версии 3 — в файле LICENSE. Сторонние
+компоненты и их лицензии перечислены в app/src/main/assets/licenses.txt и в
+приложении («Настройки → Приложение → Лицензии открытых компонентов»).
+
+No brand license / Права на бренд не предоставляются
+
+The GPL does not grant permission to use the names Говорун Эхо, Govorun Echo,
+and Эхо or Echo as the name of this app, the names Говорун and Govorun, the bird
+design, the app icons, presentation artwork, or other visual identifiers of the
+official app (the "Brand Assets"). The files listed below are not licensed under
+the GPL. As permitted by section 7(e) of the GPL, no rights are granted under
+trademark law for these names and marks.
+Copyright (c) 2025–2026 Dmitrii Kiselev (amidexe). All rights reserved for the Brand Assets.
+
+GPL не даёт права использовать названия «Говорун Эхо», Govorun Echo, а также
+«Эхо» и Echo как название этого приложения, названия «Говорун» и Govorun,
+изображение птицы, значки приложения, презентационные изображения и другие
+визуальные обозначения официального приложения (далее — «Брендовые материалы»).
+Перечисленные ниже файлы не распространяются по GPL. В соответствии с пунктом
+7(e) GPL права по законодательству о товарных знаках на эти названия и
+обозначения не предоставляются.
+Copyright (c) 2025–2026 Dmitrii Kiselev (amidexe). Все права на Брендовые
+материалы сохраняются.
+
+Forks and independent builds / Форки и самостоятельные сборки
+
+A fork or working copy may keep the Brand Assets only as needed to view the
+repository, build the official source for your own use, or prepare a
+contribution back to the official project.
+
+Before a fork, modified build, derivative product, service, or package is
+published or distributed, it must use a different product name and a different
+icon; replace or remove the Brand Assets listed below; and must not state or
+imply that it is the official app or that it is affiliated with, approved by,
+or endorsed by Govorun, Govorun Echo, or Dmitrii Kiselev. Any other use of the
+Brand Assets requires prior written permission. Truthful statements about the
+origin of the code (for example, "based on the source code of Govorun Echo") and
+saying that a product works with the Govorun app remain permitted.
+
+Форк или рабочая копия может сохранять Брендовые материалы только для просмотра
+репозитория, сборки официального исходного кода для собственного использования
+или подготовки вклада обратно в официальный проект.
+
+До публикации или распространения форка, изменённой сборки, производного
+продукта, сервиса или пакета необходимо выбрать другое название и другой значок;
+заменить или удалить перечисленные ниже Брендовые материалы; не заявлять и не
+создавать впечатление, что это официальное приложение или что оно связано с
+«Говоруном», «Говоруном.Эхо» или Дмитрием Киселёвым, одобрено или поддержано
+ими. Иное использование Брендовых материалов требует предварительного
+письменного разрешения. Достоверно указывать происхождение кода (например,
+«основано на исходном коде „Говоруна.Эхо“») и сообщать, что продукт работает с
+приложением «Говорун», можно.
+
+Reserved Brand Asset paths / Пути Брендовых материалов
+
+app/src/main/res/drawable/ic_launcher_foreground.xml
+app/src/main/res/drawable/ic_launcher_background.xml
+app/src/main/res/drawable/ic_launcher_monochrome.xml
+app/src/main/res/mipmap-anydpi/ic_launcher.xml
+app/src/main/res/drawable/ic_echo_art.xml
+app/src/main/res/drawable/ic_govorun_mark.xml
+assets/icon.svg
+assets/icon-512.png
+assets/page/hero.png
+assets/page/screens.png
+assets/page/words.png
+
+This notice does not change the separate licenses and notices that apply to
+third-party components.
+
+Это уведомление не изменяет отдельные лицензии и уведомления сторонних
+компонентов.

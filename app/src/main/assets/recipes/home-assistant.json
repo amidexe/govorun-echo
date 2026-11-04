@@ -1,0 +1,32 @@
+{
+  "id": "home-assistant",
+  "name": "Home Assistant",
+  "fields": [
+    { "id": "url", "label": "Адрес", "hint": "http://homeassistant.local:8123" },
+    { "id": "token", "label": "Токен (для Assist)", "secret": true }
+  ],
+  "actions": [
+    {
+      "id": "webhook",
+      "name": "Сценарий (webhook)",
+      "fields": [{ "id": "id", "label": "Идентификатор webhook" }],
+      "request": {
+        "method": "POST",
+        "url": "{{field.url}}/api/webhook/{{action.id}}",
+        "body": { "command": "{{command}}", "rest": "{{rest}}", "text": "{{text}}", "time": "{{time}}" }
+      }
+    },
+    {
+      "id": "assist",
+      "name": "Ассистент (Assist)",
+      "fields": [],
+      "request": {
+        "method": "POST",
+        "url": "{{field.url}}/api/conversation/process",
+        "headers": { "Authorization": "Bearer {{field.token}}" },
+        "body": { "text": "{{text}}", "language": "ru" }
+      },
+      "reply": "response.speech.plain.speech"
+    }
+  ]
+}

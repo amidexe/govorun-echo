@@ -1,0 +1,229 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- «Вход по отпечатку или коду»: Android's own fingerprint-or-code window (BiometricPrompt). -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Only the selected recording input / HFP session; no pairing, scanning or Bluetooth device names. -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- Android 16: the running recording becomes a live update, a chip with its timer in the status bar and on the lock screen. -->
+    <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Only to read the code on a computer's screen («На компьютере»), asked for the first time it is needed. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
+    <!-- NetworkPolicy enforces Offline/roaming; JobScheduler constrains pending transfers. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <uses-feature android:name="android.hardware.microphone" android:required="true" />
+
+    <queries>
+        <package android:name="com.govorun.lite" />
+        <intent>
+            <action android:name="com.govorun.api.RECOGNITION_SERVICE" />
+        </intent>
+        <!-- The smart functions through Govorun's account (docs/SMART_PLAN.md); nothing is sent unless the person turns them on. -->
+        <intent>
+            <action android:name="com.govorun.api.smart.v1.BIND" />
+        </intent>
+    </queries>
+
+    <application
+        android:name=".ui.EchoApplication"
+        android:allowBackup="true"
+        android:backupAgent=".backup.EchoBackupAgent"
+        android:fullBackupOnly="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:usesCleartextTraffic="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="${launcherLabel}"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Echo">
+        <activity android:name=".ui.TransferActivity" android:exported="false" android:configChanges="orientation|screenSize" />
+
+        <activity
+            android:name=".ui.MainActivity"
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
+        </activity>
+
+        <activity
+            android:name=".record.ImportActivity"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:exported="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="audio/*" />
+                <data android:mimeType="video/*" />
+                <data android:mimeType="application/ogg" />
+            </intent-filter>
+            <!-- Several files at once from a file manager or a gallery. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="audio/*" />
+                <data android:mimeType="video/*" />
+                <data android:mimeType="application/ogg" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="audio/*" />
+                <data android:mimeType="video/*" />
+                <data android:mimeType="application/ogg" />
+            </intent-filter>
+            <!-- Text shared from anywhere becomes a note of text only. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".record.QuickRecordActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:theme="@style/Theme.Echo.Capture" />
+
+        <!-- Puts Echo in the system list of digital assistants: holding the power button starts and stops a recording. -->
+        <activity
+            android:name=".record.AssistActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:showWhenLocked="true"
+            android:taskAffinity="${applicationId}.assist"
+            android:theme="@style/Theme.Echo.Capture">
+            <intent-filter>
+                <action android:name="android.intent.action.ASSIST" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <!-- Govorun's volume key on the lock screen: only Govorun (its signature permission) can open it. -->
+        <activity
+            android:name=".ui.VolumeKeyEntry"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop"
+            android:exported="true"
+            android:permission="${govorunPackage}.permission.VOLUME_KEY"
+            android:showWhenLocked="true"
+            android:taskAffinity="${applicationId}.capture"
+            android:theme="@style/Theme.Echo.Capture">
+            <intent-filter>
+                <action android:name="com.govorun.api.VOLUME_KEY_RECORD" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".record.CaptureActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:showWhenLocked="true"
+            android:taskAffinity="${applicationId}.capture"
+            android:theme="@style/Theme.Echo.TileCapture" />
+
+        <!-- A recording-only card may appear over the keyguard; the library remains in MainActivity. -->
+        <activity
+            android:name=".ui.TileRecordingActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:showWhenLocked="true"
+            android:taskAffinity="${applicationId}.tile"
+            android:theme="@style/Theme.Echo.RecordingEntry">
+            <intent-filter>
+                <action android:name="com.govorun.echo.RECORD_FROM_TILE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+        <service
+            android:name=".record.RecordingService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+
+        <service android:name=".web.ComputerJob" android:exported="false" android:permission="android.permission.BIND_JOB_SERVICE" />
+
+        <service android:name="com.govorun.echo.web.ComputerLinkService" android:exported="false" android:foregroundServiceType="dataSync" />
+
+        <service
+            android:name=".smart.FairJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+
+        <service
+            android:name=".playback.PlaybackService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
+
+        <service
+            android:name=".record.RecordTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_action_record"
+            android:label="@string/tile_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <service
+            android:name=".hotkey.HotkeyService"
+            android:exported="true"
+            android:label="@string/hotkey_service_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/hotkey_service" />
+        </service>
+        <receiver
+            android:name=".record.NoticeActions"
+            android:exported="false" />
+
+        <!-- Govorun says a task it keeps for Echo changed (protocol 2): Echo collects the answer or shows the new wait. -->
+        <receiver
+            android:name=".smart.TasksChanged"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.govorun.api.smart.v1.TASKS_CHANGED" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

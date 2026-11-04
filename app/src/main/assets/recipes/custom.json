@@ -1,0 +1,19 @@
+{
+  "id": "custom",
+  "name": "Свой адрес",
+  "fields": [],
+  "actions": [{
+    "id": "post",
+    "name": "Запрос на адрес",
+    "fields": [
+      { "id": "url", "label": "Адрес (https://…)" },
+      { "id": "authorization", "label": "Заголовок Authorization (необязательно)", "hint": "Bearer …" }
+    ],
+    "request": {
+      "method": "POST",
+      "url": "{{action.url}}",
+      "headers": { "Authorization": "{{action.authorization}}" },
+      "body": { "command": "{{command}}", "trigger": "{{trigger}}", "rest": "{{rest}}", "text": "{{text}}", "time": "{{time}}" }
+    }
+  }]
+}

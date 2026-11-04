@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 108 108" role="img" aria-label="Говорун Эхо">
+  <defs><clipPath id="disc"><circle cx="54" cy="54" r="54"/></clipPath></defs>
+  <g clip-path="url(#disc)">
+<path d="M0 0H108V108H0Z" fill="#E9563F"/>
+  <circle cx="54" cy="54" r="12" fill="none" stroke="#EB604A" stroke-width="2.8"/>
+  <circle cx="54" cy="54" r="19" fill="none" stroke="#EB604A" stroke-width="2.8"/>
+  <circle cx="54" cy="54" r="26" fill="none" stroke="#EB604A" stroke-width="2.8"/>
+  <circle cx="54" cy="54" r="33" fill="none" stroke="#EB604A" stroke-width="2.8"/>
+  <circle cx="54" cy="54" r="40" fill="none" stroke="#EB604A" stroke-width="2.8"/>
+  <circle cx="54" cy="54" r="47" fill="none" stroke="#EB604A" stroke-width="2.8"/>
+  <circle cx="54" cy="54" r="54" fill="none" stroke="#EB604A" stroke-width="2.8"/>
+  <circle cx="54" cy="54" r="61" fill="none" stroke="#EB604A" stroke-width="2.8"/>
+  <circle cx="54" cy="54" r="68" fill="none" stroke="#EB604A" stroke-width="2.8"/>
+  <circle cx="54" cy="54" r="75" fill="none" stroke="#EB604A" stroke-width="2.8"/>
+<path d="M 62.216 53.272 L 54.92 50.536 C 49.448 44.152 39.416 44.152 33.944 51.448 L 28.472 49.624 L 30.296 56.92 C 33.032 62.392 39.416 66.04 46.712 66.04 C 52.184 66.04 55.832 62.392 55.832 57.832 L 62.216 55.096 Z" fill="#E9563F" stroke="#2D211E" stroke-width="2.5536" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M 36.68 55.096 C 40.328 58.744 44.888 60.568 50.36 59.656" fill="none" stroke="#2D211E" stroke-width="2.0064" stroke-linecap="round"/>
+  <circle cx="50.7248" cy="50.536" r="1.2768" fill="#2D211E"/>
+  <path d="M 66.0616 48.9932 A 7.6 7.6 0 0 1 66.0616 58.7668" fill="none" stroke="#2D211E" stroke-width="2.432" stroke-linecap="round"/>
+  <path d="M 70.1352 45.5732 A 12.92 12.92 0 0 1 70.1352 62.1868" fill="none" stroke="#2D211E" stroke-width="2.432" stroke-linecap="round"/>
+  <path d="M 74.2164 42.1532 A 18.24 18.24 0 0 1 74.2164 65.6068" fill="none" stroke="#2D211E" stroke-width="2.432" stroke-linecap="round"/>
+  </g>
+</svg>

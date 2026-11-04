@@ -1,0 +1,18 @@
+<resources>
+    <style name="Theme.Echo" parent="@android:style/Theme.DeviceDefault.DayNight">
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+    <style name="Theme.Echo.Capture" parent="@android:style/Theme.Translucent.NoTitleBar" />
+    <!-- The tile's brief microphone entry is transparent, with no full-screen preview or transition. -->
+    <style name="Theme.Echo.TileCapture" parent="Theme.Echo.Capture">
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:windowDisablePreview">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
+    </style>
+    <!-- An opaque recording-only screen cannot reveal the previous app above the keyguard. -->
+    <style name="Theme.Echo.RecordingEntry" parent="Theme.Echo">
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:windowDisablePreview">true</item>
+    </style>
+</resources>

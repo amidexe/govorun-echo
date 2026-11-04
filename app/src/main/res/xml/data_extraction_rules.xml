@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12 and newer. The cloud backup carries only the small snapshot (audio is too big and has "copy to folder");
+     moving to a new phone by cable or Wi-Fi carries the notes themselves, audio included. -->
+<data-extraction-rules>
+    <cloud-backup disableIfNoEncryptionCapabilities="true">
+        <include domain="file" path="snapshot" />
+        <!-- «Итоги»: dates and numbers only, so a new phone keeps the streak. -->
+        <include domain="file" path="activity.json" />
+    </cloud-backup>
+    <device-transfer>
+        <!-- Complete durable files, including trash and future attachments. Settings are
+             serialized by EchoBackupAgent; raw preferences contain device-bound secrets. -->
+        <include domain="file" path="." />
+        <exclude domain="file" path="snapshot" />
+        <exclude domain="file" path="fair-queue.json" />
+        <exclude domain="file" path="profileInstalled" />
+        <exclude domain="file" path="profileinstaller_profileWrittenFor_lastUpdateTime.dat" />
+    </device-transfer>
+</data-extraction-rules>

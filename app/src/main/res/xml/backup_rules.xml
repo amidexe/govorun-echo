@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 11 and older: only the small snapshot of text, tags and word times goes to the Google backup. -->
+<full-backup-content>
+    <include domain="file" path="snapshot" />
+    <include domain="file" path="activity.json" />
+</full-backup-content>

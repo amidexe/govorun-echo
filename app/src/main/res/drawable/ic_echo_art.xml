@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FF6B57"
+        android:pathData="M30,0H78A30,30 0 0,1 108,30V78A30,30 0 0,1 78,108H30A30,30 0 0,1 0,78V30A30,30 0 0,1 30,0Z" />
+    <!-- Govorun mark in the same ink colour, and three arcs of sound leaving its beak: the echo. -->
+    <group
+        android:scaleX="2.4"
+        android:scaleY="2.4"
+        android:translateX="14"
+        android:translateY="26">
+        <path
+            android:strokeColor="#1F1F1F"
+            android:strokeWidth="1.4"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:fillColor="@android:color/transparent"
+            android:pathData="M21.5,10.5 L17.5,9 C14.5,5.5 9,5.5 6,9.5 L3,8.5 L4,12.5 C5.5,15.5 9,17.5 13,17.5 C16,17.5 18,15.5 18,13 L21.5,11.5 Z" />
+        <path
+            android:strokeColor="#1F1F1F"
+            android:strokeWidth="1.1"
+            android:strokeLineCap="round"
+            android:fillColor="@android:color/transparent"
+            android:pathData="M7.5,11.5 C9.5,13.5 12,14.5 15,14" />
+        <path
+            android:fillColor="#1F1F1F"
+            android:pathData="M15.2,9 m-0.7,0 a0.7,0.7 0 1,0 1.4,0 a0.7,0.7 0 1,0 -1.4,0 Z" />
+    </group>
+    <path
+        android:strokeColor="#FF1F1F1F"
+        android:strokeWidth="3.2"
+        android:strokeLineCap="round"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M70.66,45.57A10,10 0 0,1 70.66,58.43" />
+    <path
+        android:strokeColor="#A61F1F1F"
+        android:strokeWidth="3.2"
+        android:strokeLineCap="round"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M76.02,41.07A17,17 0 0,1 76.02,62.93" />
+    <path
+        android:strokeColor="#591F1F1F"
+        android:strokeWidth="3.2"
+        android:strokeLineCap="round"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M81.39,36.57A24,24 0 0,1 81.39,67.43" />
+</vector>
