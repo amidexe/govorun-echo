@@ -78,10 +78,14 @@ internal class Transcriber(
         }
         onEvent("file_start:${pcm.length() * 1_000L / NoteStore.BYTES_PER_SECOND}")
         val startedAt = System.nanoTime()
-        val result = recognizeWithRetry(dir, pcm) ?: return !yielding.remove(noteId)
-        onEvent("file_done:${(System.nanoTime() - startedAt) / 1_000_000}:${result.text.length}")
-        finishWithText(noteId, result.text, result.phrases.ifEmpty { null })
-        return true
+        try {
+            val result = recognizeWithRetry(dir, pcm) ?: return !yielding.remove(noteId)
+            onEvent("file_done:${(System.nanoTime() - startedAt) / 1_000_000}:${result.text.length}")
+            finishWithText(noteId, result.text, result.phrases.ifEmpty { null })
+            return true
+        } finally {
+            RecognitionPreview.clear(noteId)
+        }
     }
 
     /**
@@ -252,6 +256,8 @@ internal class Transcriber(
         private var progressAt = 0L
         private var textAt = 0L
         private var checkpointAt = System.currentTimeMillis()
+        private val earlierText = if (fromMs > 0) runCatching { File(dir, "text.txt").readText().trim() }.getOrDefault("") else ""
+        private val earlierPhrases = if (fromMs > 0) NoteStore.readPhrases(dir) else emptyList()
 
         @Volatile var text = ""
 
@@ -283,6 +289,11 @@ internal class Transcriber(
         ) {
             this.text = text
             this.phrases = phrases
+            RecognitionPreview.current.value = RecognitionPreview.Snapshot(
+                dir.name,
+                listOf(earlierText, text.trim()).filter { it.isNotEmpty() }.joinToString("\n\n"),
+                earlierPhrases + phrases.map { it.shifted(fromMs) },
+            )
             val now = System.currentTimeMillis()
             // Once a minute what was heard is put aside with its word times: an app stopped by Android loses a minute, not the file.
             if (now - checkpointAt >= CHECKPOINT_MS && phrases.isNotEmpty()) {

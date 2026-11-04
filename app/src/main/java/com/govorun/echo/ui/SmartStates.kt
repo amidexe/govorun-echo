@@ -30,7 +30,7 @@ internal fun smartStateText(state: String): SmartStateText =
         GovorunSmart.UPDATE -> SmartStateText(R.string.smart_state_update)
         GovorunSmart.MISSING -> SmartStateText(R.string.smart_state_missing)
         GovorunSmart.NOT_SIGNED_IN -> SmartStateText(R.string.smart_state_sign_in)
-        GovorunSmart.NOT_AUTHORIZED -> SmartStateText(R.string.smart_state_not_authorized, R.string.smart_action_authorize, "authorize")
+        GovorunSmart.NOT_AUTHORIZED, GovorunSmart.SMART_OFF -> SmartStateText(R.string.smart_state_not_authorized, R.string.smart_action_authorize, "authorize")
         GovorunSmart.NEEDS_ACCESS -> SmartStateText(R.string.smart_state_needs_access, R.string.smart_action_access, "subscription")
         GovorunSmart.STYLIZATION_TERMS -> SmartStateText(R.string.fair_terms, R.string.smart_action_terms, GovorunSmart.ACTION_STYLIZATION)
         GovorunSmart.OFFLINE -> SmartStateText(R.string.smart_state_offline)

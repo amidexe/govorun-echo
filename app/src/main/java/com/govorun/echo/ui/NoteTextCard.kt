@@ -65,13 +65,14 @@ internal fun NoteTextCard(
     // stops that until «К звуку».
     var follow by remember(note.id) { mutableStateOf(true) }
     val playing = player?.playing == true && player.noteId == note.id
+    val listening = player?.noteId == note.id
     LaunchedEffect(playing) { if (playing) follow = true }
     val readingStyle = MaterialTheme.typography.bodyLarge.copy(lineHeight = 24.sp)
     var naming by remember(note.id) { mutableStateOf(false) }
     // Text still arriving: stay at its end, so what is being said now is in view; not while the
     // note is being named at the top.
-    LaunchedEffect(note.text, note.isInProgress(), naming) {
-        if (note.isInProgress() && !naming) scroll.animateScrollTo(scroll.maxValue)
+    LaunchedEffect(note.text, note.isInProgress(), naming, listening) {
+        if (note.isInProgress() && !naming && !listening) scroll.animateScrollTo(scroll.maxValue)
     }
     // The card runs to the bottom edge of the screen, behind the record button; the text keeps
     // clear of it.
@@ -95,11 +96,11 @@ internal fun NoteTextCard(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             tabs?.invoke {}
-            recognitionFraction(note)?.let {
+            if (note.state == NoteStore.STATE_RECOGNIZING) {
                 val gate by
                     com.govorun.echo.recognition.RecognitionStatus.pausedReason.collectAsState()
                 com.product.ui.ThinProgress(
-                    it,
+                    recognitionFraction(note),
                     resting = gate == com.govorun.echo.recognition.RecognitionStatus.RECORDING,
                 )
             }

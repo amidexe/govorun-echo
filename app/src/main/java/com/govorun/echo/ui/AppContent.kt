@@ -91,7 +91,27 @@ internal fun MainActivity.App() {
                 if (com.govorun.echo.record.FileImport.picked(this@App, it)) changes++
             }
 
+        LaunchedEffect(Unit) {
+            com.govorun.echo.notes.NoteImport.pendingReveal.collect { id ->
+                if (id != null) {
+                    tab = NotesTab.All
+                    filter = NotesFilter()
+                    query = null
+                    selected = emptySet()
+                    selectMode = false
+                    screen = Screen.Notes
+                    changes++
+                }
+            }
+        }
         val lifecycle = visibleLifecycle()
+        // Import creates its note on the service's IO thread, often after the picker's first reload.
+        // Observe the store as well as local actions so an idle list cannot miss a new file.
+        LaunchedEffect(Unit) {
+            lifecycle.whileVisible {
+                com.govorun.echo.notes.NoteChanges.events.collect { changes++ }
+            }
+        }
         LaunchedEffect(resumes, changes, recordingState, backupHost.changed) {
             // With the screen off nobody looks at the list: it is read again the moment the app
             // comes back.
@@ -133,14 +153,12 @@ internal fun MainActivity.App() {
         }
         // Notes that failed only because Govorun was missing or not yet allowed are retried once it
         // is ready.
-        LaunchedEffect(govorun) {
-            if (govorun != GovorunState.Ready) return@LaunchedEffect
-            notes
-                .filter { it.waitsForGovorun() }
-                .forEach {
-                    startForegroundService(RecordingService.transcribeIntent(this@App, it.id))
-                }
-            delay(800).also { changes++ }
+        val waitingRecognition = notes.filter { it.waitsForGovorun() }.map { it.id }
+        val recognitionRecovery = remember(resumes, govorunVersion) { com.govorun.echo.recognition.RecognitionRecovery() }
+        LaunchedEffect(govorun, waitingRecognition, recognitionRecovery) {
+            recognitionRecovery.take(govorun == GovorunState.Ready, waitingRecognition).forEach { id ->
+                startForegroundService(RecordingService.transcribeIntent(this@App, id))
+            }
         }
         LaunchedEffect(Unit) {
             install = withContext(Dispatchers.IO) { InstallInfo.refresh(this@App) }

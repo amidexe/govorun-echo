@@ -33,7 +33,7 @@ internal fun govorunStateOf(
     outcome: Outcome,
     installedVersion: String?,
 ): GovorunState =
-    when (outcome) {
+    if (com.govorun.echo.recognition.GovorunProvider.requiresUpdate(installedVersion)) GovorunState.TooOld else when (outcome) {
         is Outcome.Text -> GovorunState.Ready
         Outcome.NotInstalled -> if (installedVersion != null) GovorunState.TooOld else GovorunState.NotInstalled
         Outcome.NeedsAuthorization -> GovorunState.NeedsAccess

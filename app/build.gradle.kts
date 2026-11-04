@@ -12,8 +12,8 @@ android {
         applicationId = "com.govorun.echo"
         minSdk = 31
         targetSdk = 35
-        versionCode = 229
-        versionName = "0.1.228"
+        versionCode = 231
+        versionName = "0.1.230"
         buildConfigField("String", "UPDATE_FEED", "\"\"")
         buildConfigField("boolean", "HAS_HOTKEY", "true")
         // Smart functions are provided by Govorun in the same release for every distribution channel.

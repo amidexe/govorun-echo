@@ -159,9 +159,9 @@ internal fun NoteRow(
             if (menu) NoteMenu(note, actions, onTags = { tagging = true }) { menu = false }
             if (tagging) NoteTagsSheet(listOf(note), actions, { tag, add -> actions.onSetTag(listOf(note.id), tag, add) }) { tagging = false }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(ProductTokens.Spacing.Xs)) {
-                recognitionFraction(note)?.let {
+                if (note.state == NoteStore.STATE_RECOGNIZING) {
                     val gate by com.govorun.echo.recognition.RecognitionStatus.pausedReason.collectAsState()
-                    com.product.ui.ThinProgress(it, Modifier.padding(vertical = 2.dp), resting = gate == com.govorun.echo.recognition.RecognitionStatus.RECORDING)
+                    com.product.ui.ThinProgress(recognitionFraction(note), Modifier.padding(vertical = 2.dp), resting = gate == com.govorun.echo.recognition.RecognitionStatus.RECORDING)
                 }
                 // A named card shows its name first and two quieter lines under it, as a mail list shows a subject over its preview;
                 // a note nobody named shows three lines of its text, and the row keeps its height. A name is the owner's, or the one
@@ -179,7 +179,8 @@ internal fun NoteRow(
                     val timed = if (player != null) rememberWords(note) else null
                     // In a search the card lights only what was found: the word being played is lit the same way and would pass for a find.
                     val spoken = if (search == null && timed != null && player != null && (player.playing || player.positionMs > 0)) spokenWord(timed, player.positionMs) else null
-                    if (note.isInProgress()) {
+                    val listeningToImport = note.mode == com.govorun.echo.notes.NoteImport.MODE && !note.appending && spoken != null
+                    if (note.isInProgress() && !listeningToImport) {
                         TailText(note.text, body, lines = lines)
                     } else if (spoken != null) {
                         SubtitleText(spoken, MaterialTheme.typography.bodyMedium, lines = lines)

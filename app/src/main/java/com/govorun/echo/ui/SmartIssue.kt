@@ -17,6 +17,7 @@ import kotlinx.coroutines.withContext
 /** An old account refusal describes that attempt, not whether the person is signed in now. */
 internal fun isSmartAccessIssue(reason: String?): Boolean = reason in setOf(
     GovorunSmart.NOT_SIGNED_IN, GovorunSmart.NOT_AUTHORIZED, GovorunSmart.NEEDS_ACCESS,
+    GovorunSmart.UPDATE, GovorunSmart.MISSING,
 )
 
 internal fun currentSmartIssue(previous: String?, current: String?): String? = when {

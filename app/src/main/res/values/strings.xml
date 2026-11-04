@@ -136,7 +136,7 @@
     <string name="setup_mic_title">Нужен микрофон</string>
     <string name="setup_mic_text">Без разрешения запись невозможна.</string>
     <string name="setup_govorun_missing_title">Нужен Говорун</string>
-    <string name="setup_govorun_missing_text">Для распознавания нужен Говорун 2.1 или новее на телефоне. Установите его и вернитесь в Эхо. Проходить настройку Говоруна сейчас не нужно — её можно завершить позже.</string>
+    <string name="setup_govorun_missing_text">Для распознавания нужен Говорун 2.1.1 или новее на телефоне. Установите его и вернитесь в Эхо. Проходить настройку Говоруна сейчас не нужно — её можно завершить позже.</string>
     <string name="setup_govorun_access_title">Разрешите доступ в Говоруне</string>
     <string name="setup_govorun_access_text">Говорун спросит один раз и запомнит выбор.</string>
     <string name="setup_govorun_model_title">Модель Говоруна не готова</string>
@@ -208,7 +208,7 @@
     <string name="govorun_key_title">Запись кнопкой громкости</string>
     <string name="govorun_key_offer">Разрешить в Говоруне</string>
     <string name="govorun_key_on">Разрешено в Говоруне</string>
-    <string name="govorun_key_update">Нужен Говорун 2.1 или новее</string>
+    <string name="govorun_key_update">Нужен Говорун 2.1.1 или новее</string>
     <string name="smart_state_ready">Готово</string>
     <string name="smart_queue_recovered">Не удалось восстановить состояние обработки. Автоматический повтор остановлен</string>
     <string name="smart_queue_storage">Не удалось сохранить задание. Ваши заметки на месте. Проверьте свободное место</string>
@@ -222,7 +222,7 @@
     <string name="smart_state_not_authorized">Разрешите Эхо умные функции в Говоруне</string>
     <string name="smart_state_missing">Говорун не найден</string>
     <string name="smart_state_update">Для умных функций нужна новая версия Говоруна. Запись и сохранённые тексты доступны</string>
-    <string name="smart_update_text">Эхо нужен Говорун 2.1 или новее</string>
+    <string name="smart_update_text">Эхо нужен Говорун 2.1.1 или новее</string>
     <string name="smart_state_unavailable">Умные функции сейчас недоступны. Запись и сохранённые тексты доступны</string>
     <string name="smart_state_limit_period">Достигнут лимит умных функций за период. Запись и расшифровка работают как обычно</string>
     <string name="fair_styles_missing">Не удалось получить стили улучшения. Попробуйте позже</string>
@@ -291,12 +291,12 @@
     <string name="onb_next">Далее</string>
     <string name="onb_welcome_title">Добро пожаловать</string>
     <string name="onb_welcome_body">Говорун Эхо записывает голос, превращает его в текст и хранит запись рядом, чтобы её можно было прослушать.</string>
-    <string name="onb_welcome_note">Для распознавания нужен Говорун 2.1 или новее. Сейчас проверим, установлен ли он.</string>
+    <string name="onb_welcome_note">Для распознавания нужен Говорун 2.1.1 или новее. Сейчас проверим, установлен ли он.</string>
     <string name="onb_govorun_title">Нужен Говорун</string>
-    <string name="onb_govorun_body">Для распознавания нужен Говорун 2.1 или новее на телефоне. Установите его и вернитесь в Эхо. Проходить настройку Говоруна сейчас не нужно — её можно завершить позже.</string>
+    <string name="onb_govorun_body">Для распознавания нужен Говорун 2.1.1 или новее на телефоне. Установите его и вернитесь в Эхо. Проходить настройку Говоруна сейчас не нужно — её можно завершить позже.</string>
     <string name="onb_govorun_ready">Говорун готов к работе</string>
     <string name="onb_govorun_missing">Говорун не найден</string>
-    <string name="onb_govorun_old">Установленная версия не поддерживает Эхо. Обновите Говорун до 2.1 или новее.</string>
+    <string name="onb_govorun_old">Установленная версия не поддерживает Эхо. Обновите Говорун до 2.1.1 или новее.</string>
     <string name="onb_govorun_access">Разрешите Эхо распознавать записи.</string>
     <string name="onb_govorun_model">Говорун найден, но модель ещё не загружена. Откройте Говорун и дождитесь загрузки.</string>
     <string name="onb_get_rustore">RuStore</string>
@@ -889,4 +889,5 @@
     <string name="smart_enable_text">Текст обрабатывается онлайн через Говорун. Функции могут меняться или отключаться.</string>
     <string name="smart_state_disabled">Умные функции выключены в настройках Эхо</string>
     <string name="smart_choice_save_failed">Не удалось сохранить настройку. Умные функции выключены</string>
+    <string name="onb_auto_summary_text">Текст готовых заметок обрабатывается онлайн через Говорун. Можно выключить для экономии.</string>
 </resources>

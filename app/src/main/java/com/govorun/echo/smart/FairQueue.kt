@@ -69,11 +69,11 @@ internal object FairQueue {
     /** Govorun could not be asked at all: the notes wait for Echo or a note to be opened, then go to Govorun. */
     val UNREACHABLE = setOf(GovorunSmart.MISSING, GovorunSmart.UPDATE, GovorunSmart.UNAVAILABLE, GovorunSmart.LOST)
 
-    /** The ends of a try that leave the note waiting: the screen shows the wait, not a failure. */
-    val KEPT = setOf(GovorunSmart.QUEUED, GovorunSmart.TIMEOUT, CHANGED, SmartAccess.DISABLED, com.govorun.echo.NetworkGate.OFFLINE, com.govorun.echo.NetworkGate.ROAMING, com.govorun.echo.NetworkGate.NO_NETWORK) + UNREACHABLE
+    /** Local prerequisites: retry after the person's step, preserving an already accepted task's identity. */
+    val PERSON = setOf(GovorunSmart.NOT_AUTHORIZED, GovorunSmart.NOT_SIGNED_IN, GovorunSmart.NEEDS_ACCESS, GovorunSmart.STYLIZATION_TERMS, GovorunSmart.OFFLINE, GovorunSmart.ROAMING)
 
-    /** The waits the person ends with a step in Govorun: the only ones with a button under the note. */
-    val PERSON = setOf(GovorunSmart.NOT_SIGNED_IN, GovorunSmart.NEEDS_ACCESS, GovorunSmart.STYLIZATION_TERMS, GovorunSmart.OFFLINE, GovorunSmart.ROAMING)
+    /** The ends of a try that leave the note waiting: the screen shows the wait, not a failure. */
+    val KEPT = setOf(GovorunSmart.QUEUED, GovorunSmart.TIMEOUT, CHANGED, SmartAccess.DISABLED, com.govorun.echo.NetworkGate.OFFLINE, com.govorun.echo.NetworkGate.ROAMING, com.govorun.echo.NetworkGate.NO_NETWORK) + UNREACHABLE + PERSON
 
     /**
      * What a try of [entry] that ended with [reason] (null: the answer is written) leaves of it, or null when nothing is left to
@@ -96,6 +96,12 @@ internal object FairQueue {
             // No answer within Govorun's own window: the task is still Govorun's, never cancelled from here.
             GovorunSmart.TIMEOUT -> entry.copy(atMs = HELD, taskId = taskId, wait = null, message = "", failed = false)
             in UNREACHABLE -> entry.copy(atMs = HELD, taskId = taskId ?: entry.taskId, wait = reason, message = "", failed = false)
+            // Govorun rejects smart_off before accepting a task: the journalled ID is safe to clear.
+            GovorunSmart.SMART_OFF -> entry.copy(atMs = HELD, taskId = null, wait = GovorunSmart.NOT_AUTHORIZED, message = "", failed = false)
+            in PERSON -> if (entry.failed && entry.taskId != null) {
+                // Govorun already reported this accepted task as terminal: preserve its final refusal, never submit it again.
+                entry.copy(atMs = HELD, taskId = null, wait = reason, message = message, failed = true)
+            } else entry.copy(atMs = HELD, taskId = taskId ?: entry.taskId, wait = reason, message = "", failed = false)
             // The person changed the text under the try: the text as it stands now, at once.
             CHANGED -> entry.copy(atMs = now, taskId = null, wait = null, message = "", failed = false)
             // The latest final refusal stays visible across reopen; no timer or automatic re-hand-in.
@@ -172,7 +178,9 @@ internal object FairQueue {
     fun refuse(context: Context, noteId: String, reason: String, kind: String = FAIR, message: String = "") {
         update(context) { entries ->
             val old = entries[key(kind, noteId)] ?: Entry(noteId, null, kind)
-            entries[old.key] = old.copy(atMs = HELD, taskId = null, wait = reason, message = message, failed = true, asked = true)
+            entries[old.key] = if (reason in PERSON || reason in UNREACHABLE) {
+                checkNotNull(next(old.copy(asked = true), reason, System.currentTimeMillis(), message = message))
+            } else old.copy(atMs = HELD, taskId = null, wait = reason, message = message, failed = true, asked = true)
         }
         schedule(context)
     }
@@ -225,7 +233,7 @@ internal object FairQueue {
     fun reconcile(entry: Entry, task: GovorunSmart.Task?): Entry = when {
         !entry.held || entry.failed -> entry
         task?.state == WAITING -> entry.copy(wait = task.wait, message = task.message)
-        task?.state in setOf("done", "failed") -> entry.copy(atMs = 0)
+        task?.state in setOf("done", "failed") -> entry.copy(atMs = 0, failed = task?.state == "failed")
         // Missing results or a future unknown state are never permission to execute another paid task.
         task == null && entry.taskId != null -> entry.copy(wait = "result_missing", failed = true)
         task == null -> entry.copy(atMs = 0)
@@ -286,7 +294,11 @@ internal object FairQueue {
         val entries = (0 until notes.length()).map { notes.getJSONObject(it) }.map { o ->
             val id = requireNotNull(o.text("id"))
             val kind = o.optString("kind", FAIR).also { require(it == FAIR || it == ITOGI) }
-            Entry(id, o.text("style"), kind, o.optBoolean("asked", true), o.optBoolean("layer"), o.optLong("at"), o.text("task"), o.text("wait"), o.optString("message"), o.optBoolean("failed"), o.text("draft"))
+            Entry(id, o.text("style"), kind, o.optBoolean("asked", true), o.optBoolean("layer"), o.optLong("at"), o.text("task"), o.text("wait"), o.optString("message"), o.optBoolean("failed"), o.text("draft")).let { entry ->
+                // Published 0.1.228 stored this pre-acceptance refusal as terminal, although granting access resolves it.
+                if (entry.failed && entry.taskId == null && entry.wait == GovorunSmart.SMART_OFF)
+                    entry.copy(atMs = HELD, wait = GovorunSmart.NOT_AUTHORIZED, failed = false) else entry
+            }
         }
         require(entries.map { it.key }.distinct().size == entries.size)
         return entries.associateBy { it.key }

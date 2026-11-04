@@ -160,6 +160,14 @@ internal fun NotesScreen(
     // The archive's row keeps only the pinned tags its notes carry.
     val rowTags = actions.pinnedTags.filter { !archiveScope || (counts[it] ?: 0) > 0 }.map { it to (counts[it] ?: 0) }
     val list = rememberLazyListState()
+    val revealImport by com.govorun.echo.notes.NoteImport.pendingReveal.collectAsState()
+    LaunchedEffect(revealImport, visible) {
+        val id = revealImport ?: return@LaunchedEffect
+        if (visible.any { it.id == id }) {
+            list.scrollToItem(0)
+            com.govorun.echo.notes.NoteImport.revealed(id)
+        }
+    }
     val header = TopAppBarDefaults.enterAlwaysScrollBehavior(
         state = rememberTopAppBarState(), canScroll = { !searching && !selecting && !drawer.isOpen },
     )

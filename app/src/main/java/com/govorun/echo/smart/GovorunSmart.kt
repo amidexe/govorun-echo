@@ -48,8 +48,10 @@ internal class GovorunSmart(
         val styles: List<Style> = emptyList(),
         /** What this Govorun can do for Echo ([NEEDED] and the like), told once Echo is let in. */
         val capabilities: Set<String> = emptySet(),
+        val automaticAuthorized: Boolean = false,
     ) {
         val ready: Boolean get() = state == READY
+        val automaticState: String get() = if (ready && !automaticAuthorized) NOT_AUTHORIZED else state
 
         companion object {
             fun of(json: String): Status =
@@ -65,7 +67,7 @@ internal class GovorunSmart(
                         if (o.optString("state") == READY && !capabilities.containsAll(NEEDED)) UPDATE else o.optString("state", UNAVAILABLE), o.optInt("termsVersion"), o.optString("accessLabel"), o.optInt("usedToday"), o.optInt("limitToday"),
                         key != null, key?.optBoolean("granted") == true, improve,
                         o.optJSONArray("styles")?.let { a -> (0 until a.length()).mapNotNull { a.optJSONObject(it) }.map { Style(it.optString("value"), it.optString("title")) } }.orEmpty(),
-                        capabilities,
+                        capabilities, o.optBoolean("smart"),
                     )
                 }.getOrDefault(Status(UNAVAILABLE))
         }
@@ -112,9 +114,12 @@ internal class GovorunSmart(
     fun present(): Boolean = GovorunProvider.resolve(appContext, GovorunProvider.SMART_ACTION) != null
 
     /** A Govorun of an older protocol is [UPDATE]: its calls past createAction are another method each, so none is made. */
-    suspend fun status(): Status =
-        call(anyProtocol = true) { if (it.protocolVersion < PROTOCOL) Status(UPDATE) else Status.of(it.getStatus(appContext.packageName)) }
-            ?: Status(if (present()) UNAVAILABLE else MISSING)
+    suspend fun status(): Status {
+        val installed = GovorunProvider.installedVersion(appContext)
+        if (GovorunProvider.requiresUpdate(installed)) return Status(UPDATE)
+        return call(anyProtocol = true) { if (it.protocolVersion < PROTOCOL) Status(UPDATE) else Status.of(it.getStatus(appContext.packageName)) }
+            ?: Status(if (present()) UNAVAILABLE else if (installed != null) UPDATE else MISSING)
+    }
 
     /** Updates the existing Binder contract without a new service or changing Govorun's global choices. */
     suspend fun syncNetworkPolicy(): Boolean {

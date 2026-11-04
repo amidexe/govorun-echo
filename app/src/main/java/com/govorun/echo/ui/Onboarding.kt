@@ -50,6 +50,15 @@ import com.adamglin.phosphoricons.regular.Microphone
 import com.adamglin.phosphoricons.regular.SpeakerHigh
 import com.adamglin.phosphoricons.regular.SquaresFour
 import com.adamglin.phosphoricons.regular.Waveform
+import com.adamglin.phosphoricons.regular.Sparkle
+import com.govorun.echo.AppSettings
+import com.govorun.echo.smart.GovorunSmart
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.lifecycle.compose.LifecycleResumeEffect
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.adamglin.phosphoricons.regular.Warning
 import com.adamglin.phosphoricons.regular.Bell
 import com.adamglin.phosphoricons.regular.TextAa
@@ -180,10 +189,17 @@ private fun Note(text: String) {
 
 @Composable
 private fun WelcomeStep() {
+    val context = LocalContext.current
+    var automatic by remember { mutableStateOf(AppSettings.itogiAuto(context)) }
     Hero({ Image(painterResource(R.drawable.ic_echo_art), contentDescription = null, modifier = Modifier.size(104.dp)) }, R.string.onb_welcome_title, R.string.onb_welcome_body)
     FeedCard {
         Column {
             SettingsInfoRow(PhosphorIcons.Regular.TextAa, stringResource(R.string.onb_feat_text_title), stringResource(R.string.onb_feat_text_text))
+            ProductDivider()
+            SwitchRow(PhosphorIcons.Regular.Sparkle, R.string.itogi_auto_title, R.string.onb_auto_summary_text, automatic) {
+                automatic = it
+                AppSettings.setItogiAuto(context, it)
+            }
         }
     }
     Note(stringResource(R.string.onb_welcome_note))
@@ -194,6 +210,17 @@ private fun GovorunStep(
     state: OnboardingState,
     actions: OnboardingActions,
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var smartState by remember { mutableStateOf<String?>(null) }
+    LifecycleResumeEffect(state.govorun) {
+        val job = scope.launch {
+            smartState = if (state.govorun == GovorunState.Ready && com.govorun.echo.smart.Smart.chosen()) {
+                withContext(Dispatchers.IO) { GovorunSmart(context).status().let { if (AppSettings.itogiAuto(context)) it.automaticState else it.state } }.takeUnless { it == GovorunSmart.READY }
+            } else null
+        }
+        onPauseOrDispose { job.cancel() }
+    }
     var showSources by remember(state.govorun) { mutableStateOf(false) }
     val needsInstall = state.govorun == GovorunState.NotInstalled || state.govorun == GovorunState.TooOld
     val title = when (state.govorun) {
@@ -228,6 +255,18 @@ private fun GovorunStep(
                 Column(Modifier.padding(ProductTokens.Spacing.Section), verticalArrangement = Arrangement.spacedBy(ProductTokens.Spacing.Md)) {
                     OutlinedButton(onClick = actions.onSelfTest, enabled = !state.selfTestRunning) { Text(stringResource(R.string.onb_selftest)) }
                     state.selfTest?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                }
+                smartState?.let { reason ->
+                    val text = smartStateText(reason)
+                    ProductDivider()
+                    SettingsInfoRow(PhosphorIcons.Regular.Sparkle, stringResource(text.line))
+                    text.action?.let { label ->
+                        Row(Modifier.padding(start = ProductTokens.Spacing.Section, end = ProductTokens.Spacing.Section, bottom = ProductTokens.Spacing.Lg)) {
+                            Button(onClick = { scope.launch { openGovorunFor(context, reason) } }, colors = productButtonColors()) {
+                                Text(stringResource(label))
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -50,14 +50,15 @@ internal fun FairSettings() {
 private fun EnabledSmartSettings() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    var auto by remember { mutableStateOf(AppSettings.itogiAuto(context)) }
     var step by remember { mutableStateOf<String?>(null) }
     // Read again on every return, so signing in to Govorun and coming back opens the tab at once.
-    LifecycleResumeEffect(Unit) {
-        val job = scope.launch { step = GovorunSmart(context).status().state.takeUnless { it == GovorunSmart.READY } }
+    LifecycleResumeEffect(auto) {
+        val job = scope.launch { step = GovorunSmart(context).status().let { if (auto) it.automaticState else it.state }.takeUnless { it == GovorunSmart.READY } }
         onPauseOrDispose { job.cancel() }
     }
     val network by com.govorun.echo.NetworkPolicy.state.collectAsState()
-    val wait = network.reason ?: step
+    val wait = if (step == GovorunSmart.UPDATE || step == GovorunSmart.MISSING) step else network.reason ?: step
     if (wait != null && !isOfflineReason(wait)) {
         val text = smartStateText(wait)
         if (text.action != null) {
@@ -67,7 +68,6 @@ private fun EnabledSmartSettings() {
         }
         ProductDivider()
     }
-    var auto by remember { mutableStateOf(AppSettings.itogiAuto(context)) }
     SwitchRow(PhosphorIcons.Regular.Sparkle, R.string.itogi_auto_title, R.string.itogi_auto_text, auto) {
         auto = it
         AppSettings.setItogiAuto(context, it)

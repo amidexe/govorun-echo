@@ -17,6 +17,17 @@ internal object GovorunProvider {
     private const val DEBUG_PACKAGE = "com.govorun.lite.debug"
     private const val PRODUCTION_SIGNER = "190e293847873495c5b79d203650bae2b9f7c90ba1a27648fa203ab88cff6d42"
 
+    fun installedVersion(context: Context): String? =
+        runCatching { context.packageManager.getPackageInfo(PACKAGE, 0).versionName }.getOrNull()
+
+    fun requiresUpdate(version: String?): Boolean {
+        val parts = version?.split('.') ?: return false
+        val major = parts.getOrNull(0)?.toIntOrNull() ?: return false
+        val minor = parts.getOrNull(1)?.takeWhile { it.isDigit() }?.toIntOrNull() ?: return false
+        val patch = parts.getOrNull(2)?.takeWhile { it.isDigit() }?.toIntOrNull() ?: 0
+        return major < 2 || major == 2 && (minor < 1 || minor == 1 && patch < 1)
+    }
+
     /** Govorun's service answering [action] (recognition by default, or the smart functions' [SMART_ACTION]), if it is the real Govorun. */
     fun resolve(
         context: Context,

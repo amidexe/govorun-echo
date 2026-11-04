@@ -29,6 +29,14 @@ internal object NoteImport {
         preparing.add(id)
         try {
             return prepareNote(context, uri, id, dir)
+        } catch (error: Exception) {
+            android.util.Log.w("Echo", "event=import_failed note=$id", error)
+            if (dir.isDirectory) NoteStore.updateMeta(dir) {
+                put("state", NoteStore.STATE_FAILED)
+                put("error", "import_failed")
+                remove("preparedMs")
+            }
+            return null
         } finally {
             preparing.remove(id)
         }
@@ -48,6 +56,7 @@ internal object NoteImport {
                 .put("state", NoteStore.STATE_RECOGNIZING)
                 .put("error", PREPARING),
         )
+        pendingReveal.value = id
         // The only real limit on what can be imported: room for its decoded sound (16 kHz, about 115 MB an hour) while it is
         // recognized. Several files queue up; length and number are not limited, the phone's temperature is minded instead.
         val length = durationMs(context, uri)
@@ -87,6 +96,7 @@ internal object NoteImport {
         AudioPeaks.saveRecorded(dir, peaks.bytes(), 0L)
         NoteStore.updateMeta(dir) {
             put("durationMs", ms)
+            put("totalMs", ms)
             put("bytes", pcm.length())
             put("error", "")
             // The kept file holds all of the sound: nothing is compressed from the raw audio, which goes once the text is there.
@@ -149,6 +159,10 @@ internal object NoteImport {
 
     /** Notes whose sound is being prepared right now; a resume of unfinished work must leave them alone. */
     val preparing: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
+    /** Reveal an accepted file once; later progress must not move a list the person has scrolled. */
+    val pendingReveal = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+    fun revealed(id: String) { pendingReveal.compareAndSet(id, null) }
 
     const val MODE = "import"
 

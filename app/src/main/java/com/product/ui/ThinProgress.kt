@@ -15,19 +15,31 @@ import androidx.compose.ui.unit.dp
 
 /**
  * How far a long job got, as a thin line instead of numbers: the app's one progress mark (a file being recognized today, any long
- * work tomorrow). [fraction] from 0 to 1; [resting] greys it while the work waits (a phone cooling down, a pause).
+ * work tomorrow). [fraction] from 0 to 1, or null while the amount is unknown; [resting] greys it while the work waits (a phone cooling down, a pause).
  */
 @Composable
 fun ThinProgress(
-    fraction: Float,
+    fraction: Float?,
     modifier: Modifier = Modifier,
     resting: Boolean = false,
 ) {
+    val line = modifier.fillMaxWidth().height(3.dp).clip(CircleShape)
+    val ink = if (resting) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.primary
+    if (fraction == null) {
+        LinearProgressIndicator(
+            modifier = line,
+            color = ink,
+            trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+            strokeCap = StrokeCap.Round,
+            gapSize = 0.dp,
+        )
+        return
+    }
     val shown by animateFloatAsState(fraction.coerceIn(0f, 1f), label = "progress")
     LinearProgressIndicator(
         progress = { shown },
-        modifier = modifier.fillMaxWidth().height(3.dp).clip(CircleShape),
-        color = if (resting) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.primary,
+        modifier = line,
+        color = ink,
         trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
         strokeCap = StrokeCap.Round,
         gapSize = 0.dp,

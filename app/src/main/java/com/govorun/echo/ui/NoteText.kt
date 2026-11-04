@@ -2,6 +2,7 @@ package com.govorun.echo.ui
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -32,6 +33,11 @@ internal fun TailText(
  */
 @Composable
 internal fun rememberWords(note: NoteStore.Entry): NoteStore.Entry? {
+    if (note.state == NoteStore.STATE_RECOGNIZING) {
+        val preview by com.govorun.echo.recognition.RecognitionPreview.current.collectAsState()
+        val showing = remember(note, preview) { com.govorun.echo.recognition.RecognitionPreview.forNote(note, preview) }
+        showing?.let { return it }
+    }
     if (!note.timed || note.phrases.isNotEmpty()) return note
     val context = androidx.compose.ui.platform.LocalContext.current
     val read by androidx.compose.runtime.produceState<Pair<String, List<NoteStore.Phrase>>?>(null, note) {

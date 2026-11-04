@@ -31,7 +31,7 @@ internal data class InstallInfo(
         val DEFAULT =
             InstallInfo(
                 rustoreUrl = "https://www.rustore.ru/catalog/app/com.govorun.lite",
-                githubUrl = "https://github.com/amidexe/govorun-lite/releases",
+                githubUrl = "https://github.com/amidexe/govorun-lite/releases/tag/v2.1.1",
                 siteUrl = "https://govorun.club/",
                 reviewUrl = "",
                 notice = "",
@@ -43,12 +43,22 @@ internal data class InstallInfo(
             val obj = runCatching { JSONObject(json) }.getOrNull() ?: return DEFAULT
             return InstallInfo(
                 rustoreUrl = safeUrl(obj.optString("rustoreUrl")) ?: DEFAULT.rustoreUrl,
-                githubUrl = safeUrl(obj.optString("githubUrl")) ?: DEFAULT.githubUrl,
+                githubUrl = compatibleGithubUrl(obj.optString("githubUrl")) ?: DEFAULT.githubUrl,
                 siteUrl = safeUrl(obj.optString("siteUrl")) ?: DEFAULT.siteUrl,
                 reviewUrl = safeUrl(obj.optString("reviewUrl")).orEmpty(),
                 notice = obj.optString("notice").take(300),
                 rustoreAvailable = obj.optBoolean("rustoreAvailable", false),
             )
+        }
+
+        private fun compatibleGithubUrl(value: String): String? {
+            val safe = safeUrl(value) ?: return null
+            val url = URL(safe)
+            if (url.host == "github.com" && url.path.startsWith("/amidexe/govorun-lite/releases")) {
+                val version = Regex("/releases/(?:tag|download)/v([0-9.]+)").find(url.path)?.groupValues?.get(1) ?: return null
+                if (com.govorun.echo.recognition.GovorunProvider.requiresUpdate(version)) return null
+            }
+            return safe
         }
 
         private fun safeUrl(value: String): String? {

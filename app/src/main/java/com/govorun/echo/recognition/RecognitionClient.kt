@@ -75,15 +75,20 @@ private const val CAPABILITY_CONTINUOUS_PROFILES = 1
 private const val CAPABILITY_WORD_TIMESTAMPS = 1 shl 3
 private const val CAPABILITY_SHARED_ENGINE = 1 shl 4
 private const val CONTINUOUS_FLAG_WORD_TIMESTAMPS = 1 shl 16
+private const val CAPABILITY_FILE_AUDIO_COVERAGE = 1 shl 6
+
+/** Ask a supporting Govorun to keep all file audio, including speech its live VAD would miss. */
+internal fun fileRecognitionProfile(capabilities: Int): Int =
+    (if (capabilities and CAPABILITY_WORD_TIMESTAMPS != 0) CONTINUOUS_FLAG_WORD_TIMESTAMPS else 0) or
+        (if (capabilities and CAPABILITY_FILE_AUDIO_COVERAGE != 0) 2 else 0)
 private const val MAX_TIMED_FILE_BYTES = 40L * 60 * 32_000
 
 /** A file this short is one phrase for any Govorun; a longer one is made of many and costs Govorun memory unless it is segmented. */
 internal const val SHORT_FILE_BYTES = 30L * 32_000
 
 /**
- * A note longer than 30 seconds goes to Govorun as a stream it reads at its own speed: Govorun's own speech detector cuts it into
- * phrases and every phrase comes back with its word times, however long the file. A short one, or one for a Govorun without
- * streams, goes as a file.
+ * A note longer than 30 seconds goes to Govorun as a stream it reads at its own speed. The file profile retains all audio
+ * in bounded passes and returns word times; older providers use their existing stream profile. Short notes go as a file.
  */
 internal fun sendsAsStream(
     fileBytes: Long,
@@ -116,7 +121,7 @@ class RecognitionClient(
         file: File,
         feed: RecognitionFeed? = null,
     ): Outcome =
-        withService({ it }) { service, lost ->
+        if (GovorunProvider.requiresUpdate(installedVersion())) Outcome.NotInstalled else withService({ it }) { service, lost ->
             if (service.protocolVersion != PROTOCOL_VERSION) return@withService Outcome.Failed(FAILED_PROTOCOL)
             if (service.getAuthorizationStatus(appContext.packageName) != AUTHORIZED) {
                 return@withService Outcome.NeedsAuthorization
@@ -258,7 +263,7 @@ class RecognitionClient(
         val pipe = if (feed != null) ParcelFileDescriptor.createPipe() else null
         (pipe?.get(0) ?: ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)).use { descriptor ->
             if (capabilities and CAPABILITY_CONTINUOUS_PROFILES != 0) {
-                val flag = if (capabilities and CAPABILITY_WORD_TIMESTAMPS != 0) CONTINUOUS_FLAG_WORD_TIMESTAMPS else 0
+                val flag = fileRecognitionProfile(capabilities)
                 service.recognizeContinuousWithProfile(appContext.packageName, sessionId, descriptor, SAMPLE_RATE, 1, 16, flag, callback)
             } else {
                 service.recognizeContinuous(appContext.packageName, sessionId, descriptor, SAMPLE_RATE, 1, 16, callback)
@@ -312,7 +317,7 @@ class RecognitionClient(
 
     /** Version of the installed Govorun package, even if it is too old to offer the API; null if absent. */
     fun installedVersion(): String? =
-        runCatching { appContext.packageManager.getPackageInfo(PROVIDER_PACKAGE, 0).versionName }.getOrNull()
+        GovorunProvider.installedVersion(appContext)
 
     /** Whether Govorun is present and has approved this app, without recognizing anything. */
     suspend fun status(): Outcome =

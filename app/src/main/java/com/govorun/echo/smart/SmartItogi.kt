@@ -120,6 +120,7 @@ internal object SmartItogi {
         // A Govorun not installed or to be updated is not asked: the note says so, and nothing is tried by itself.
         val status = smart.status()
         if (status.state == GovorunSmart.MISSING || status.state == GovorunSmart.UPDATE) return Outcome(null, status.state)
+        if (!asked && status.ready && !status.automaticAuthorized) return Outcome(null, GovorunSmart.NOT_AUTHORIZED)
         if (!status.capabilities.containsAll(setOf(GovorunSmart.TEXT_TASKS))) return Outcome(null, status.state.takeUnless { it == GovorunSmart.READY } ?: GovorunSmart.UPDATE)
         // Govorun's bounds first, at once and with no network: a note outside them is not sent at all. A spent day is Govorun's
         // to wait out: it keeps the task and makes the итоги when the day turns.

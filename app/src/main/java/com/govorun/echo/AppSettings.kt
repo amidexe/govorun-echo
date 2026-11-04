@@ -332,8 +332,8 @@ object AppSettings {
         return listener
     }
 
-    /** Automatic summaries are a second, explicit choice; enabling smart tools does not enable automation. */
-    fun itogiAuto(context: Context): Boolean = prefs(context).getBoolean("itogi_auto", false)
+    /** Automatic summaries default on; an explicit saved economy choice stays off. */
+    fun itogiAuto(context: Context): Boolean = prefs(context).getBoolean("itogi_auto", true)
 
     /** The shortest and longest note Govorun last said it makes итоги of, 0 for «not said yet». */
     fun itogiBounds(context: Context): Pair<Int, Int> = prefs(context).let { it.getInt("itogi_min", 0) to it.getInt("itogi_max", 0) }
