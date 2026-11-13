@@ -1,110 +1,88 @@
 package com.govorun.echo.ui
 
 import android.Manifest
-import android.app.KeyguardManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
-import android.util.Log
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.*
 import androidx.lifecycle.lifecycleScope
 import com.govorun.echo.AppEntry
 import com.govorun.echo.AppSettings
-import com.govorun.echo.record.RecordingBus
-import com.govorun.echo.record.RecordingService
-import com.govorun.echo.record.RecordingState
-import com.govorun.echo.record.canStartTileCapture
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
+import com.govorun.echo.CapturePurpose
+import com.govorun.echo.record.*
 
-/** A real recording card, like the volume-key entry: no library or transcript above the keyguard. */
+/** A real recording card for shortcuts and keyguard; never an invisible microphone bootstrap. */
 class TileRecordingActivity : ComponentActivity() {
-    private var attempted by mutableStateOf(false)
-    private var watching: Job? = null
-    private var failed by mutableStateOf(false)
-    private var unlocked by mutableStateOf(false)
+    private var fromTile by mutableStateOf(false)
+    private var closing by mutableStateOf(false)
+    private var session by mutableStateOf<CaptureSession?>(null)
+    private val requestMicrophone = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+        openSession(false)
+        if (window.decorView.hasWindowFocus()) session?.begin()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setShowWhenLocked(true)
-        attempted = savedInstanceState?.getBoolean("attempted") ?: false
+        prepareCaptureTransition()
+        setShowWhenLocked(intent.getBooleanExtra(AppEntry.TILE_RECORDING_EXTRA, false))
+        val canAskForMicrophone = intent.getBooleanExtra(AppEntry.WIDGET_RECORDING_EXTRA, false) ||
+            (!intent.getBooleanExtra(AppEntry.TILE_RECORDING_EXTRA, false) &&
+                CapturePurpose.of(intent.getStringExtra(CapturePurpose.FIELD)) == CapturePurpose.COMMAND)
+        val needsMicrophone = canAskForMicrophone &&
+            checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED
+        if (savedInstanceState == null && needsMicrophone) {
+            requestMicrophone.launch(Manifest.permission.RECORD_AUDIO)
+        } else if (savedInstanceState?.getBoolean("awaitingMicrophone") != true) {
+            openSession(savedInstanceState?.getBoolean("attempted") ?: false)
+        }
         setContent {
-            EchoTheme(AppSettings.themeMode(this), AppSettings.dynamicColors(this)) {
+            EchoTheme(AppSettings.themeMode(this), AppSettings.dynamicColors(this), updateSystemBars = false) {
                 val state by RecordingBus.state.collectAsState()
                 val stopping by RecordingBus.stopping.collectAsState()
-                TileRecordingCard(if (attempted) state else RecordingState.Starting, stopping, failed, unlocked, ::stopRecording, ::finishAndRemoveTask, ::openApp)
+                session?.let { capture ->
+                    TileRecordingCard(if (capture.attempted) state else RecordingState.Starting, stopping, capture.failed,
+                        capture::stop, ::finishAndRemoveTask, capture.result, closeRequested = closing, systemTransition = fromTile,
+                        purpose = capture.purpose, onOpenNote = { openCaptureNote(it) })
+                }
             }
         }
     }
 
-    override fun onResume() { super.onResume(); unlocked = !locked() }
-
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        // Reopening a still-visible card adopts its recording. It never starts a second one.
-        if (failed || canStartTileCapture(RecordingBus.state.value, RecordingBus.stopping.value)) {
-            attempted = false; failed = false; watching?.cancel(); watching = null
-            if (window.decorView.hasWindowFocus()) begin()
+        setIntent(intent)
+        if (session == null) return
+        val requested = CapturePurpose.of(intent.getStringExtra(CapturePurpose.FIELD))
+        if (session?.purpose != requested || session?.failed == true ||
+            canStartTileCapture(RecordingBus.state.value, RecordingBus.stopping.value)) {
+            session?.close(); openSession(false)
         }
+        if (window.decorView.hasWindowFocus()) session?.begin()
+    }
+
+    private fun openSession(attempted: Boolean) {
+        closing = false
+        fromTile = intent.getBooleanExtra(AppEntry.TILE_RECORDING_EXTRA, false)
+        setShowWhenLocked(fromTile)
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        session = CaptureSession(this, lifecycleScope, intent.getBooleanExtra("recording_existing_only", false),
+            intent.getStringExtra("recording_mode")?.takeIf { it == RecordingService.MODE_NOTE } ?: RecordingService.MODE_LONG, attempted,
+            onSettled = { window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }, onFinished = { closing = true },
+            purpose = CapturePurpose.of(intent.getStringExtra(CapturePurpose.FIELD)))
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        if (hasFocus) { unlocked = !locked(); begin() }
-    }
-
-    private fun begin() {
-        if (watching != null) return
-        if (!attempted) {
-            attempted = true
-            if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-                failed = true; return
-            }
-            if (canStartTileCapture(RecordingBus.state.value, RecordingBus.stopping.value)) {
-                Log.i("RecordTile", "event=tile_card_start")
-                RecordingBus.state.value = RecordingState.Starting
-                runCatching { startForegroundService(RecordingService.startIntent(this, RecordingService.MODE_LONG)) }
-                    .onFailure { RecordingBus.failed("tile_card_start_failed") }
-            }
-        }
-        if (RecordingBus.state.value is RecordingState.Idle) { failed = true; return }
-        watching = lifecycleScope.launch {
-            var state = RecordingBus.state.first { it !is RecordingState.Starting }
-            if (state is RecordingState.Recording) {
-                Log.i("RecordTile", "event=tile_card_recording")
-                state = RecordingBus.state.first { it !is RecordingState.Recording && it !is RecordingState.Starting }
-            }
-            if (state is RecordingState.Saved || state is RecordingState.Discarded) {
-                delay(1_200); finishAndRemoveTask()
-            } else failed = true
-        }
-    }
-
-    private fun stopRecording() {
-        if (RecordingBus.stopping.value) return
-        RecordingBus.stopping.value = true
-        runCatching { startService(RecordingService.stopIntent(this)) }
-            .onFailure {
-                RecordingBus.stopping.value = false
-                android.widget.Toast.makeText(this, com.govorun.echo.R.string.recording_entry_stop_failed, android.widget.Toast.LENGTH_LONG).show()
-            }
-    }
-
-    private fun locked() = getSystemService(KeyguardManager::class.java).isKeyguardLocked
-
-    private fun openApp() {
-        // Recheck at the action, including when the phone locked while this card was visible.
-        if (locked()) { unlocked = false; return }
-        startActivity(AppEntry.intent(this))
-        finishAndRemoveTask()
+        if (hasFocus) session?.begin()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
-        outState.putBoolean("attempted", attempted)
+        outState.putBoolean("attempted", session?.attempted ?: false)
+        outState.putBoolean("awaitingMicrophone", session == null)
         super.onSaveInstanceState(outState)
     }
 }

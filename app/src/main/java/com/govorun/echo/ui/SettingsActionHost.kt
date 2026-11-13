@@ -18,7 +18,7 @@ internal fun MainActivity.createSettingsActions(
     onRetention: (Int) -> Unit,
     onChanged: () -> Unit,
     onHelp: () -> Unit,
-    onVersionTap: () -> Unit,
+    onUnlockExperiments: () -> Unit,
 ): SettingsActions =
     SettingsActions(
         onBack = { onNavigate(Screen.Notes) },
@@ -50,7 +50,8 @@ internal fun MainActivity.createSettingsActions(
         onOpenJournal = { onNavigate(Screen.Journal) },
         onOpenLicenses = { onNavigate(Screen.Licenses) },
         onOpenAbout = { onNavigate(Screen.About) },
-        onVersionTap = { onVersionTap() },
+        onUnlockExperiments = onUnlockExperiments,
+        onOpenExperiments = { onNavigate(Screen.Experiments) },
         onExportAll = { exporter.exportNotes(notes().sortedBy { it.startedAtMs }) },
         onPickBackup = backupHost::pickFolder,
         onTransfer = { startActivity(Intent(this, TransferActivity::class.java)) },

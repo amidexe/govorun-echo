@@ -9,32 +9,35 @@ import java.io.File
 /** Stable IDs, not dates or display names, determine identity. Conflicts are reported and never silently duplicated. */
 internal object ArchiveRestore {
     enum class Kind { New, Same, Enrich, Conflict, Damaged }
-    data class Unit(val relative: String, val incoming: File, val kind: Kind, val fingerprint: String) { val isNote get() = relative.startsWith("notes/") || relative.startsWith("trash/")
+    data class Unit(val relative: String, val incoming: File, val kind: Kind, val fingerprint: String, val record: Boolean = incoming.isDirectory) { val isNote get() = record && (relative.startsWith("notes/") || relative.startsWith("trash/"))
         fun label():String = runCatching {JSONObject(File(incoming,"meta.json").readText()).optString("title")}.getOrDefault("").ifBlank {
             runCatching {File(incoming,"text.txt").bufferedReader().use {reader->val buffer=CharArray(80);val n=reader.read(buffer);if(n>0)String(buffer,0,n).replace('\n',' ').trim() else ""}}.getOrDefault("")
         }.ifBlank{relative.substringAfterLast('/')}
     }
     data class Plan(val units: List<Unit>, val preferences: JSONObject?, val problems: List<String>) {
-        fun count(kind: Kind) = units.count { it.isNote && it.kind == kind }
+        fun count(kind: Kind) = units.count { (it.isNote || kind == Kind.Conflict || kind == Kind.Damaged) && it.kind == kind }
     }
     data class Result(val added: Int, val enriched: Int, val unchanged: Int, val conflicts: Int, val damaged: Int, val problems: List<String>)
     private val bookkeeping = setOf("backup","restored","unseen","pinned","archived","tags","changedAtMs","format","deletedAtMs")
 
     fun plan(staged: PortableArchive.Staged, target: File): Plan {
         val units=mutableListOf<Unit>(); val problems=staged.problems.toMutableList()
-        val records=(staged.expectedUnits + listOf("notes","trash").flatMap { folder -> File(staged.root,folder).listFiles().orEmpty().filter { it.isDirectory }.map { "$folder/${it.name}" } }).sorted()
+        val records=(staged.expectedUnits + listOf("notes","trash","command-history").flatMap { folder -> File(staged.root,folder).listFiles().orEmpty().filter { it.isDirectory }.map { "$folder/${it.name}" } }).sorted()
         val seenIds=mutableSetOf<String>()
         records.forEach { original ->
             val dir=File(staged.root,original);val id=original.substringAfter('/')
             val other=(if(original.startsWith("notes/")) "trash/" else "notes/")+id
-            val rel=if(!File(target,original).exists() && File(target,other).isDirectory)other else original
+            val rel=if(!original.startsWith("command-history/") && !File(target,original).exists() && File(target,other).isDirectory)other else original
             val destination=File(target,rel)
             val problem=staged.problems.any{it.startsWith("damaged:data/$original/") || it.startsWith("missing:data/$original/")}
             val kind=if(problem || !validNote(dir)) Kind.Damaged else if(!seenIds.add(id)) Kind.Conflict else classify(dir,destination,true)
-            units+=Unit(rel,dir,kind,fingerprint(destination))
+            units+=Unit(rel,dir,kind,fingerprint(destination),record=true)
         }
         // Every other current or future user file is carried without a field list. Existing differing values remain intact.
-        staged.root.walkTopDown().filter { it.isFile && it.relativeTo(staged.root).invariantSeparatorsPath.substringBefore('/') !in setOf("notes","trash") }.forEach { file ->
+        staged.root.walkTopDown().filter { file ->
+            val relative=file.relativeTo(staged.root).invariantSeparatorsPath
+            file.isFile && (relative.substringBefore('/') !in setOf("notes","trash","command-history") || relative.count { it=='/' }<2)
+        }.forEach { file ->
             val rel=file.relativeTo(staged.root).invariantSeparatorsPath
             if (PortableArchive.safe(rel) && PortableArchive.portable(rel)) units += Unit(rel,file,classify(file,File(target,rel),false),fingerprint(File(target,rel)))
         }
@@ -103,11 +106,11 @@ internal object ArchiveRestore {
         plan.units.forEach { unit ->
             when(unit.kind) {
                 Kind.Same -> if(unit.isNote) same++
-                Kind.Conflict -> if(unit.isNote) conflicts++ else if(replaceGlobals) {
+                Kind.Conflict -> if(unit.record || !replaceGlobals) conflicts++ else {
                     try {check(fingerprint(File(target,unit.relative))==unit.fingerprint);RestoreTransaction.prepare(unit.incoming);atomic{RestoreTransaction.install(target,unit.relative,unit.incoming,work)}}
                     catch(e:Exception){RestoreTransaction.recover(target,work);problems+="restore_failed:${unit.relative}"}
                 }
-                Kind.Damaged -> if(unit.isNote) damaged++
+                Kind.Damaged -> damaged++
                 Kind.New,Kind.Enrich -> try {
                     val stamp=fastStamp(File(target,unit.relative))
                     check(fingerprint(File(target,unit.relative))==unit.fingerprint) { "target_changed" }

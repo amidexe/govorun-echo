@@ -1,26 +1,14 @@
 package com.govorun.echo.ui
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -35,6 +23,7 @@ import com.adamglin.phosphoricons.regular.GearSix
 import com.adamglin.phosphoricons.regular.Microphone
 import com.adamglin.phosphoricons.regular.DownloadSimple
 import com.adamglin.phosphoricons.regular.FileText
+import com.adamglin.phosphoricons.regular.Flask
 import com.adamglin.phosphoricons.regular.FolderOpen
 import com.adamglin.phosphoricons.regular.FolderSimple
 import com.adamglin.phosphoricons.regular.Info
@@ -47,7 +36,7 @@ import com.adamglin.phosphoricons.regular.Question
 import com.adamglin.phosphoricons.regular.SpeakerHigh
 import com.adamglin.phosphoricons.regular.SquaresFour
 import com.adamglin.phosphoricons.regular.ShieldCheck
-import com.adamglin.phosphoricons.regular.Sparkle
+import com.adamglin.phosphoricons.regular.Swatches
 import com.adamglin.phosphoricons.regular.Tag
 import com.adamglin.phosphoricons.regular.Warning
 import com.adamglin.phosphoricons.regular.Clock
@@ -59,17 +48,15 @@ import com.adamglin.phosphoricons.regular.Waveform
 import com.adamglin.phosphoricons.regular.XCircle
 import com.govorun.echo.AppSettings
 import com.govorun.echo.R
-import com.product.ui.CompactSwitch
 import com.product.ui.ProductChoiceSheet
 import com.product.ui.ProductDivider
-import com.product.ui.ProductScaffold
 import com.product.ui.ProductSectionItem
 import com.product.ui.ProductSettingsShell
 import com.product.ui.ProductTokens
 import com.product.ui.SettingsInfoRow
 import com.product.ui.SettingsLinkRow
 import com.product.ui.SettingsSection
-import com.product.ui.productScreenPadding
+import com.product.ui.SettingsSwitchRow
 
 internal class SettingsState(
     val serviceEnabled: Boolean,
@@ -81,7 +68,6 @@ internal class SettingsState(
     val retentionDays: Int,
     val noteCount: Int,
     val usageBytes: Long,
-    val versionName: String,
     val advanced: Boolean,
     val backup: com.govorun.echo.backup.BackupFolder.Status?,
 )
@@ -105,7 +91,8 @@ internal class SettingsActions(
     val onTransfer: () -> Unit,
     val onAddTile: () -> Unit,
     val onOpenCommands: () -> Unit,
-    val onVersionTap: () -> Unit,
+    val onUnlockExperiments: () -> Unit,
+    val onOpenExperiments: () -> Unit,
     val onOpenJournal: () -> Unit,
     val onOpenLicenses: () -> Unit,
     val onOpenAbout: () -> Unit,
@@ -140,25 +127,18 @@ internal fun SettingsScreen(
         run {
             if (tab == SettingsTab.RECORD) {
                 item {
-                    HelpSection(stringResource(R.string.settings_group_record), R.string.help_record) {
-                    MicrophoneSetting()
-                    ProductDivider()
-                    GovorunKeyEntry()
-                    ProductDivider()
-                    if (com.govorun.echo.BuildConfig.HAS_HOTKEY) {
-                        // Hidden behind one entry until the person opts in; the rows below appear once the system switch is on.
-                        if (state.serviceEnabled) {
-                            SwitchRow(PhosphorIcons.Regular.SpeakerHigh, R.string.settings_hotkey_switch, R.string.settings_hotkey_switch_text, state.hotkeyEnabled, actions.onHotkey)
-                            ProductDivider()
-                        } else {
-                            HotkeyEntry(actions.onOpenAccessibility)
-                            ProductDivider()
+                    SettingsSection("", showTitle = false) {
+                        MicrophoneSetting()
+                        GovorunKeyEntry(actions.onOpenAccessibility)
+                        if (com.govorun.echo.BuildConfig.HAS_HOTKEY) {
+                            if (state.serviceEnabled) {
+                                SwitchRow(PhosphorIcons.Regular.SpeakerHigh, R.string.settings_hotkey_switch, R.string.settings_hotkey_switch_text, state.hotkeyEnabled, actions.onHotkey)
+                            } else {
+                                HotkeyEntry(actions.onOpenAccessibility)
+                            }
                         }
-                    }
-                        SettingsLinkRow(PhosphorIcons.Regular.SquaresFour, stringResource(R.string.settings_tile_title), stringResource(R.string.settings_tile_text), onClick = actions.onAddTile)
-                        ProductDivider()
+                        SettingsLinkRow(PhosphorIcons.Regular.SquaresFour, stringResource(R.string.settings_tile_title), onClick = actions.onAddTile)
                         SilenceStopSetting()
-                        ProductDivider()
                         EmptyNotesSetting()
                     }
                 }
@@ -166,41 +146,30 @@ internal fun SettingsScreen(
                 item {
                     SettingsSection(stringResource(R.string.settings_group_signals)) {
                         RecordingTapsSetting()
-                        ProductDivider()
                         SavedNoticeSetting()
-                        ProductDivider()
                         ActionSoundsSetting()
                     }
                 }
+                item { RecordingHelpRow() }
             }
             if (tab == SettingsTab.NOTES) {
                 item {
                     SettingsSection(stringResource(R.string.settings_play_title)) {
                         SwitchRow(PhosphorIcons.Regular.Play, R.string.settings_next_title, R.string.settings_next_text, state.playNext, actions.onPlayNext)
-                        ProductDivider()
                         PlayScreenSetting()
-                        ProductDivider()
                         RaiseToListenSetting()
                     }
                 }
-            }
-            if (tab == SettingsTab.NOTES) {
                 item {
-                    SettingsSection(stringResource(R.string.action_search)) {
+                    SettingsSection("", showTitle = false) {
                         SearchOrderSetting()
-                    }
-                }
-            }
-            if (tab == SettingsTab.NOTES) {
-                item {
-                    SettingsSection(stringResource(R.string.settings_notes_title)) {
                         SwitchRow(PhosphorIcons.Regular.Clock, R.string.settings_stamps_title, R.string.settings_stamps_text, state.stamps, actions.onStamps)
                     }
                 }
             }
             if (tab == SettingsTab.STORAGE) {
                 item {
-                    HelpSection(stringResource(R.string.settings_storage_title), R.string.help_storage) {
+                    HelpSection(stringResource(R.string.settings_storage_title), R.string.help_storage_title, R.string.help_storage) {
                         SettingsInfoRow(
                             PhosphorIcons.Regular.Database,
                             stringResource(R.string.settings_usage_title),
@@ -229,7 +198,7 @@ internal fun SettingsScreen(
             }
             if (tab == SettingsTab.STORAGE) {
                 item {
-                    HelpSection(stringResource(R.string.backup_section), R.string.help_backup) {
+                    HelpSection(stringResource(R.string.backup_section), R.string.help_backup_title, R.string.help_backup) {
                         SettingsLinkRow(PhosphorIcons.Regular.Desktop, stringResource(R.string.transfer_title), stringResource(R.string.transfer_short), onClick = actions.onTransfer)
                         ProductDivider()
                         GoogleBackupRow()
@@ -249,12 +218,13 @@ internal fun SettingsScreen(
                                 )
                             }
                             ProductDivider()
-                            SettingsLinkRow(PhosphorIcons.Regular.ArrowsClockwise, stringResource(R.string.backup_now), onClick = actions.onBackupNow)
+                            if (backup.networkReason != null) NetworkNotice(backup.networkReason, Modifier.padding(horizontal = ProductTokens.Spacing.Section))
+                            else SettingsLinkRow(PhosphorIcons.Regular.ArrowsClockwise, stringResource(R.string.backup_now), onClick = actions.onBackupNow)
                             ProductDivider()
                             SettingsLinkRow(PhosphorIcons.Regular.DotsThree, stringResource(R.string.backup_more), onClick = { backupMore = !backupMore })
                             if (backupMore) {
                                 ProductDivider()
-                                SettingsLinkRow(PhosphorIcons.Regular.DownloadSimple, stringResource(R.string.backup_restore), onClick = actions.onBackupRestore)
+                                SettingsLinkRow(PhosphorIcons.Regular.DownloadSimple, stringResource(R.string.backup_restore), enabled = backup.networkReason == null, onClick = actions.onBackupRestore)
                                 ProductDivider()
                                 SettingsLinkRow(PhosphorIcons.Regular.FolderOpen, stringResource(R.string.backup_change), onClick = actions.onPickBackup)
                                 ProductDivider()
@@ -275,8 +245,7 @@ internal fun SettingsScreen(
                             value = stringResource(themeLabels.getValue(state.themeMode)),
                             onClick = { themeSheet = true },
                         )
-                        ProductDivider()
-                        SwitchRow(PhosphorIcons.Regular.Sparkle, R.string.settings_dynamic_title, R.string.settings_dynamic_text, state.dynamicColors, actions.onDynamicColors)
+                        SwitchRow(PhosphorIcons.Regular.Swatches, R.string.settings_dynamic_title, R.string.settings_dynamic_text, state.dynamicColors, actions.onDynamicColors)
                     }
                 }
             }
@@ -291,22 +260,26 @@ internal fun SettingsScreen(
             if (tab == SettingsTab.APP) item { NetworkSettings() }
             if (tab == SettingsTab.APP) {
                 item {
-                    SettingsSection(stringResource(R.string.settings_about_title)) {
+                    SettingsSection("", showTitle = false) {
                         AppLockSetting()
-                        ProductDivider()
-                        SettingsLinkRow(PhosphorIcons.Regular.Question, stringResource(R.string.settings_help), stringResource(R.string.settings_help_text), onClick = actions.onHelp)
-                        ProductDivider()
-                        SettingsLinkRow(PhosphorIcons.Regular.FileText, stringResource(R.string.journal_title), stringResource(R.string.journal_summary), onClick = actions.onOpenJournal)
-                        ProductDivider()
-                        SettingsLinkRow(PhosphorIcons.Regular.Info, stringResource(R.string.about_title), value = state.versionName, onClick = actions.onOpenAbout)
+                        SettingsLinkRow(PhosphorIcons.Regular.Lightning, stringResource(R.string.commands_title),
+                            stringResource(R.string.commands_summary), onClick = actions.onOpenCommands)
                     }
                 }
             }
-            if (tab == SettingsTab.APP && state.advanced) {
+            if (tab == SettingsTab.APP) {
                 item {
-                    SettingsSection(stringResource(R.string.settings_advanced)) {
-                        SettingsLinkRow(PhosphorIcons.Regular.Lightning, stringResource(R.string.commands_title), stringResource(R.string.commands_summary), onClick = actions.onOpenCommands)
-                        MarkdownCopySetting(actions.onPickBackup)
+                    SettingsSection("", showTitle = false) {
+                        SettingsLinkRow(PhosphorIcons.Regular.Question, stringResource(R.string.settings_help),
+                            stringResource(R.string.settings_help_text), onClick = actions.onHelp)
+                        SettingsLinkRow(PhosphorIcons.Regular.FileText, stringResource(R.string.journal_title),
+                            stringResource(R.string.journal_summary), onClick = actions.onOpenJournal)
+                        if (state.advanced) {
+                            SettingsLinkRow(PhosphorIcons.Regular.Flask, stringResource(R.string.settings_advanced),
+                                onClick = actions.onOpenExperiments)
+                        }
+                        SettingsLinkRow(PhosphorIcons.Regular.Info, stringResource(R.string.about_title),
+                            onClick = actions.onOpenAbout)
                     }
                 }
             }
@@ -334,28 +307,17 @@ internal fun SettingsScreen(
     }
 }
 
-/** Same layout as the shared link row, with Dayplan's icon at the start and a switch at the end. */
 @Composable
 internal fun SwitchRow(
     icon: ImageVector,
     title: Int,
-    text: Int,
+    text: Int?,
     checked: Boolean,
     onChange: (Boolean) -> Unit,
-) {
-    Surface(onClick = { onChange(!checked) }, color = Color.Transparent) {
-        Row(
-            Modifier.fillMaxWidth().heightIn(min = ProductTokens.Size.Row).padding(horizontal = ProductTokens.Spacing.Section, vertical = ProductTokens.Spacing.Md),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.width(ProductTokens.Spacing.Lg))
-            androidx.compose.foundation.layout.Column(Modifier.weight(1f)) {
-                Text(stringResource(title), style = MaterialTheme.typography.bodyMedium)
-                Text(stringResource(text), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Spacer(Modifier.width(ProductTokens.Spacing.Lg))
-            CompactSwitch(checked)
-        }
-    }
-}
+) = SettingsSwitchRow(
+    title = stringResource(title),
+    summary = text?.let { stringResource(it) },
+    checked = checked,
+    onCheckedChange = onChange,
+    icon = icon,
+)

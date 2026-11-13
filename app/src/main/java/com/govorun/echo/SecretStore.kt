@@ -21,6 +21,8 @@ internal class SecretStore(
 ) {
     private val prefs = context.getSharedPreferences(file, Context.MODE_PRIVATE)
 
+    fun hasEntries(prefix: String): Boolean = prefs.all.keys.any { it.startsWith(prefix) }
+
     fun get(name: String): String? =
         prefs.getString(name, null)?.let {
             runCatching {

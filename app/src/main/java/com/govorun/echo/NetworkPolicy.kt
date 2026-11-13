@@ -66,6 +66,18 @@ internal object NetworkPolicy {
     }
 
     fun requireAllowed() { gate.allowed {} }
+
+    // A user-selected DocumentsProvider can use the network on our behalf. Only Android's
+    // storage and downloads providers are known local destinations for folder copies.
+    private fun isLocalFolderProvider(authority: String?) =
+        authority == "com.android.externalstorage.documents" || authority == "com.android.providers.downloads.documents"
+
+    fun folderRefusal(authority: String?): String? =
+        if (isLocalFolderProvider(authority)) null else state.value.reason
+
+    fun <T> withFolderAccess(authority: String?, work: (checkAccess: () -> Unit) -> T): T =
+        if (isLocalFolderProvider(authority)) work {} else gate.begin {}.use { lease -> work(lease::check) }
+
     /** Binder hand-in is local: absent connectivity may queue a task, an explicit refusal may not. */
     fun <T> submit(block: () -> T): T = synchronized(lock) {
         current.value.reason?.takeIf(NetworkGate::isUserRefusal)

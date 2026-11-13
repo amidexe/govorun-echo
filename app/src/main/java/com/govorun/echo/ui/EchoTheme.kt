@@ -56,6 +56,7 @@ private val EchoTypography =
 fun EchoTheme(
     themeMode: Int,
     dynamicColor: Boolean,
+    updateSystemBars: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     val dark =
@@ -65,7 +66,7 @@ fun EchoTheme(
             else -> isSystemInDarkTheme()
         }
     val view = LocalView.current
-    SideEffect {
+    if (updateSystemBars) SideEffect {
         view.context.findActivity()?.window?.let { window ->
             WindowCompat.getInsetsController(window, view).apply {
                 isAppearanceLightStatusBars = !dark

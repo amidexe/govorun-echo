@@ -124,7 +124,7 @@ internal object Snapshot {
         var bytes = tags.toString().toByteArray().size
         val done =
             root.listFiles { f -> f.isDirectory }.orEmpty().mapNotNull { dir ->
-                runCatching { JSONObject(File(dir, "meta.json").readText()) }.getOrNull()?.takeIf { it.optString("state") == NoteStore.STATE_DONE }?.let { dir to it }
+                runCatching { JSONObject(File(dir, "meta.json").readText()) }.getOrNull()?.takeIf { it.optString("state") == NoteStore.STATE_DONE && !com.govorun.echo.notes.CommandHistory.isCommand(it) }?.let { dir to it }
             }
         for ((dir, meta) in done.sortedByDescending { it.second.optLong("startedAtMs") }) {
             val text = runCatching { File(dir, "text.txt").readText() }.getOrDefault("")

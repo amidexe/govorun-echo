@@ -16,7 +16,7 @@ import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import com.govorun.echo.AppSettings
-import com.govorun.echo.record.CaptureActivity
+import com.govorun.echo.AppEntry
 import com.govorun.echo.record.Feedback
 import com.govorun.echo.record.RecordingBus
 import com.govorun.echo.record.RecordingService
@@ -194,7 +194,7 @@ class HotkeyService : AccessibilityService() {
         triedVisibleStart = true
         Log.i(TAG, "event=visible_start_fallback")
         val intent =
-            Intent(this, CaptureActivity::class.java).addFlags(
+            AppEntry.recording(this).putExtra("recording_mode", RecordingService.MODE_NOTE).addFlags(
                 Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION,
             )
         runCatching { startActivity(intent) }.onFailure { failWhileHeld("visible_start_failed") }

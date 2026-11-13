@@ -58,7 +58,9 @@ internal object PortableArchive {
         val memory=ByteArrayOutputStream();val buffer=ByteArray(8192);while(true){val n=input.read(buffer);if(n<0)break;require(memory.size()+n<=MAX_INDEX_BYTES){"manifest_too_large"};memory.write(buffer,0,n)};val bytes=memory.toByteArray()
         val json=JSONObject(bytes.decodeToString());require(json.optString("format")=="govorun-echo-user-data" && json.optInt("version")==VERSION){"unsupported_format"};val files=json.getJSONObject("files");files.keys().forEach { require(safe(it) && (it.startsWith("data/") || it=="preferences.json")){"unsafe_manifest"} };return files
     }
-    private fun expectedUnits(expected:JSONObject?)=expected?.keys()?.asSequence()?.filter{it.startsWith("data/notes/") || it.startsWith("data/trash/")}?.map{it.removePrefix("data/").split('/').take(2).joinToString("/")}?.toSet().orEmpty()
+    private fun expectedUnits(expected:JSONObject?)=expected?.keys()?.asSequence()?.filter {
+        val parts=it.split('/');parts.size>=4 && parts[0]=="data" && parts[1] in setOf("notes","trash","command-history")
+    }?.map{it.removePrefix("data/").split('/').take(2).joinToString("/")}?.toSet().orEmpty()
     private fun finish(destination:File,expected:JSONObject?,seen:Set<String>,problems:MutableList<String>):Staged {
         expected?.keys()?.asSequence()?.filter{it !in seen}?.forEach{problems+="missing:$it"}
         val preferences=File(destination,"preferences.json").takeIf{it.isFile}?.let{runCatching{JSONObject(it.readText())}.getOrElse{problems+="damaged:preferences.json";null}}

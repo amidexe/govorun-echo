@@ -1,5 +1,6 @@
 package com.govorun.echo.record
 
+import com.govorun.echo.CapturePurpose
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
@@ -14,12 +15,14 @@ sealed interface RecordingState {
         val noteId: String,
         val mode: String,
         val startedAtMs: Long,
+        val purpose: CapturePurpose = CapturePurpose.NOTE,
     ) : RecordingState
 
     data class Saved(
         val noteId: String,
         val durationMs: Long,
         val stopReason: String,
+        val purpose: CapturePurpose = CapturePurpose.NOTE,
     ) : RecordingState
 
     /** Cancelled with «Отмена»: a new recording went to the trash unrecognized, a continued note stayed as it was. */

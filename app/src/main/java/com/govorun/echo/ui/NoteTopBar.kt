@@ -27,6 +27,7 @@ import com.adamglin.phosphoricons.regular.X
 import com.govorun.echo.R
 import com.govorun.echo.notes.NoteStore
 import com.product.ui.ProductTokens
+import com.product.ui.ProductNavigationButton
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,21 +56,9 @@ internal fun NoteTopBar(
             ),
         navigationIcon = {
             if (current != null) {
-                IconButton(onClick = onFragmentBack) {
-                    Icon(
-                        PhosphorIcons.Regular.X,
-                        contentDescription = stringResource(R.string.fragment_exit),
-                        modifier = Modifier.size(ProductTokens.Size.TopBarNavigationIcon),
-                    )
-                }
+                ProductNavigationButton(PhosphorIcons.Regular.X, stringResource(R.string.fragment_exit), onFragmentBack)
             } else {
-                IconButton(onClick = goBack) {
-                    Icon(
-                        PhosphorIcons.Regular.ArrowLeft,
-                        contentDescription = stringResource(R.string.action_back),
-                        modifier = Modifier.size(ProductTokens.Size.TopBarNavigationIcon),
-                    )
-                }
+                ProductNavigationButton(PhosphorIcons.Regular.ArrowLeft, stringResource(R.string.action_back), goBack)
             }
         },
         title = {

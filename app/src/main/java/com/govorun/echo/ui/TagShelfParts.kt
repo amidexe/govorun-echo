@@ -36,7 +36,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalBottomSheetProperties
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -84,6 +83,7 @@ import com.govorun.echo.R
 import com.govorun.echo.notes.NoteStore
 import com.product.ui.ProductTokens
 import kotlinx.coroutines.launch
+import com.product.ui.ProductModalSheet
 
 
 /*
@@ -152,13 +152,11 @@ internal fun ShelfFrame(
     val focus = LocalFocusManager.current
     val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
-    ModalBottomSheet(
+    ProductModalSheet(
         onDismissRequest = onDismiss,
         sheetState = state,
         // Back is the sheet's own: the window's properties are read once, while what Back does changes as tags are chosen.
         properties = ModalBottomSheetProperties(shouldDismissOnBackPress = false),
-        containerColor = MaterialTheme.colorScheme.background,
-        contentColor = MaterialTheme.colorScheme.onSurface,
     ) {
         BackHandler { onBack?.invoke() ?: scope.launch { state.hide() }.invokeOnCompletion { onDismiss() } }
         Column(Modifier.fillMaxHeight().navigationBarsPadding().imePadding().padding(start = 16.dp, end = 16.dp)) {

@@ -253,6 +253,9 @@ internal class Transcriber(
         private val dir: File,
         override val fromMs: Long,
     ) : RecognitionFeed {
+        override val fileSpeechFilter = runCatching {
+            JSONObject(File(dir, "meta.json").readText()).optBoolean("fileSpeechFilter", false)
+        }.getOrDefault(false)
         private var progressAt = 0L
         private var textAt = 0L
         private var checkpointAt = System.currentTimeMillis()

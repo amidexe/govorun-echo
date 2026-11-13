@@ -30,6 +30,7 @@ internal object FolderDetails {
         notes: List<Pair<java.io.File, JSONObject>>,
         names: Map<String, String>,
         tags: JSONObject,
+        checkAccess: () -> Unit,
     ) {
         // Added to, never rebuilt: a note gone from the phone (deleted, or a phone just reinstalled) keeps its line, as its files stay
         // in the folder, so a copy made before the restore cannot wipe what the restore needs.
@@ -45,7 +46,7 @@ internal object FolderDetails {
         val body = JSONObject().put("version", VERSION).put("tags", tags).put("notes", list).toString()
         val mark = tree.toString() + "|" + java.util.zip.CRC32().apply { update(body.toByteArray()) }.value
         if (mark == written && NAME in present) return
-        SafeFolderWrite.write(resolver, present, rootDoc, "application/json", NAME) { it.write(body.toByteArray()) }
+        SafeFolderWrite.write(resolver, present, rootDoc, "application/json", NAME, checkAccess) { it.write(body.toByteArray()) }
         written = mark
     }
 

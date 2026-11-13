@@ -225,19 +225,6 @@ internal fun MainActivity.createNotesActions(
                     reload()
                 }
             },
-            onRetryCommand = { id ->
-                com.govorun.echo.commands.Dispatcher.onNoteDoneAsync(
-                    this@createNotesActions,
-                    id,
-                    force = true,
-                )
-                scope.launch {
-                    delay(4_000)
-                    reload()
-                    delay(8_000)
-                    reload()
-                }
-            },
             onExport = { ids ->
                 // No selection in the archive means "the whole archive".
                 val targets =

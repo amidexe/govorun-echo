@@ -30,7 +30,5 @@ internal fun NoteAttention(note: NoteStore.Entry, failed: Boolean) {
             Text(stringResource(status), style = noteSupportingStyle(), color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
-    note.command?.takeIf { !it.ok }?.let {
-        Text("${it.name}: ${it.label}", style = noteSupportingStyle(), color = MaterialTheme.colorScheme.error, maxLines = 1, overflow = TextOverflow.Ellipsis)
-    }
+
 }

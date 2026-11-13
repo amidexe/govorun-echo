@@ -12,10 +12,13 @@ android {
         applicationId = "com.govorun.echo"
         minSdk = 31
         targetSdk = 35
-        versionCode = 231
-        versionName = "0.1.230"
+        versionCode = 276
+        versionName = "0.1.275"
+        // Public identifier for the Android OAuth client. The device obtains its own token.
+        manifestPlaceholders["YANDEX_CLIENT_ID"] = "b40b6b8a28a844cc8aca1298aca70e05"
         buildConfigField("String", "UPDATE_FEED", "\"\"")
         buildConfigField("boolean", "HAS_HOTKEY", "true")
+        buildConfigField("boolean", "HAS_YANDEX_HOME", "true")
         // Smart functions are provided by Govorun in the same release for every distribution channel.
         buildConfigField("boolean", "HAS_SMART", "true")
         // Echo on a computer: the blind relay the phone sends a computer's notes through (relay/ in this repository).
@@ -41,6 +44,9 @@ android {
             buildConfigField("String", "ECHO_WEB_RELAY", "\"http://127.0.0.1:8787\"")
             // The debug build of Echo pairs with the debug build of Govorun (GovorunProvider).
             manifestPlaceholders["govorunPackage"] = "com.govorun.lite.debug"
+            // A separately registered debug client must not intercept the signed app's OAuth callback.
+            manifestPlaceholders["YANDEX_CLIENT_ID"] = providers.gradleProperty("echoYandexDebugClientId")
+                .getOrElse("00000000000000000000000000000000")
         }
         release {
             isMinifyEnabled = true
@@ -58,6 +64,8 @@ android {
         compose = true
     }
 
+    packaging.resources.excludes += "META-INF/NOTICE.md"
+
     androidResources {
         localeFilters += listOf("ru", "en")
     }
@@ -65,6 +73,59 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+}
+
+abstract class GenerateRecordingShortcut : DefaultTask() {
+    @get:Input
+    abstract val applicationId: Property<String>
+
+    @get:OutputDirectory
+    abstract val resourceDirectory: DirectoryProperty
+
+    @TaskAction
+    fun generate() {
+        val shortcut = resourceDirectory.file("xml/shortcuts.xml").get().asFile
+        shortcut.parentFile.mkdirs()
+        shortcut.writeText(
+            """
+            <shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+                <shortcut
+                    android:shortcutId="record"
+                    android:enabled="true"
+                    android:icon="@mipmap/ic_shortcut_record"
+                    android:shortcutShortLabel="@string/shortcut_record_short"
+                    android:shortcutLongLabel="@string/shortcut_record_long">
+                    <intent
+                        android:action="android.intent.action.VIEW"
+                        android:targetClass="com.govorun.echo.record.QuickRecordActivity"
+                        android:targetPackage="${applicationId.get()}" />
+                </shortcut>
+                <shortcut
+                    android:shortcutId="command"
+                    android:enabled="true"
+                    android:icon="@mipmap/ic_shortcut_command"
+                    android:shortcutShortLabel="@string/widget_command_label"
+                    android:shortcutLongLabel="@string/shortcut_command_short">
+                    <intent
+                        android:action="com.govorun.echo.SAY_COMMAND"
+                        android:targetClass="com.govorun.echo.record.QuickRecordActivity"
+                        android:targetPackage="${applicationId.get()}" />
+                </shortcut>
+            </shortcuts>
+            """.trimIndent(),
+        )
+    }
+}
+
+androidComponents {
+    onVariants { variant ->
+        // Android reads targetPackage as a literal in shortcut XML.
+        val generateShortcut = tasks.register<GenerateRecordingShortcut>("generate${variant.name.replaceFirstChar(Char::uppercaseChar)}RecordingShortcut") {
+            applicationId.set(variant.applicationId)
+            resourceDirectory.set(layout.buildDirectory.dir("generated/recordingShortcut/${variant.name}"))
+        }
+        variant.sources.res?.addGeneratedSourceDirectory(generateShortcut, GenerateRecordingShortcut::resourceDirectory)
     }
 }
 
@@ -89,6 +150,9 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:1.6.2")
     implementation("androidx.camera:camera-compose:1.6.2")
     implementation("com.google.zxing:core:3.5.4")
+    implementation("com.yandex.android:authsdk:3.1.3")
+    // LoginSDK's public parcelables reference Parcelize, which the SDK POM omits.
+    implementation("org.jetbrains.kotlin:kotlin-parcelize-runtime:2.3.0")
     implementation(project(":clip"))
     implementation(project(":smart"))
 

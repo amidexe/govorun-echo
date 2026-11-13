@@ -15,7 +15,6 @@ import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Regular
 import com.adamglin.phosphoricons.regular.CloudSlash
 import com.adamglin.phosphoricons.regular.ArrowsClockwise
-import com.govorun.echo.BuildConfig
 import com.product.ui.SettingsInfoRow
 import com.product.ui.SettingsLinkRow
 import androidx.compose.material3.Text
@@ -63,7 +62,7 @@ internal fun UpdateCard() {
     }
 }
 
-/** "Check for updates" in Settings: one tap checks, and when a newer version is there the same row installs it. */
+/** About screen action: check for an update or install the available version. */
 @Composable
 internal fun UpdateSettingsRow() {
     val context = LocalContext.current
@@ -75,27 +74,28 @@ internal fun UpdateSettingsRow() {
     LaunchedEffect(lifecycle) { lifecycle.whileVisible { withContext(Dispatchers.IO) { AppUpdates.checkForUpdate(context) } } }
     val network by com.govorun.echo.NetworkPolicy.state.collectAsState()
     val offer = AppUpdates.offer
+    val title = stringResource(if (offer == null) R.string.update_row_title else R.string.update_install)
     val summary =
         when {
             network.reason != null -> stringResource(smartStateText(network.reason!!).line)
             AppUpdates.phase == AppUpdates.Phase.DOWNLOADING -> stringResource(R.string.update_downloading, (AppUpdates.progress * 100).toInt())
             AppUpdates.phase == AppUpdates.Phase.FAILED -> stringResource(R.string.update_failed)
             checking -> stringResource(R.string.update_checking)
-            offer != null -> stringResource(R.string.update_row_available, offer.versionName)
+            offer != null -> stringResource(R.string.update_title, offer.versionName)
             unreachable -> stringResource(R.string.update_unreachable)
-            result == false -> stringResource(R.string.update_latest, BuildConfig.VERSION_NAME)
-            else -> stringResource(R.string.update_row_hint, BuildConfig.VERSION_NAME)
+            result == false -> stringResource(R.string.update_latest)
+            else -> null
         }
     if (network.reason != null) {
         SettingsInfoRow(
             if (isOfflineReason(network.reason)) PhosphorIcons.Regular.CloudSlash else PhosphorIcons.Regular.ArrowsClockwise,
-            stringResource(R.string.update_row_title), summary,
+            title, summary,
         )
         return
     }
     SettingsLinkRow(
         PhosphorIcons.Regular.ArrowsClockwise,
-        stringResource(R.string.update_row_title),
+        title,
         summary,
         enabled = network.reason == null && !checking && AppUpdates.phase != AppUpdates.Phase.DOWNLOADING,
         onClick = {

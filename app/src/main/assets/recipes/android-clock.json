@@ -1,0 +1,18 @@
+{
+  "id": "android-clock",
+  "name": "Часы Android",
+  "actions": [
+    {
+      "id": "timer",
+      "name": "Поставить таймер",
+      "android": { "kind": "timer", "text": "{{rest}}" },
+      "needsRest": true
+    },
+    {
+      "id": "alarm",
+      "name": "Поставить будильник",
+      "android": { "kind": "alarm", "text": "{{rest}}" },
+      "needsRest": true
+    }
+  ]
+}

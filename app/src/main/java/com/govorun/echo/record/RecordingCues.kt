@@ -7,7 +7,7 @@ import com.govorun.echo.AppSettings
 
 /**
  * What the person feels and steers around a recording besides the sound: a firm tap when it starts and two when it is saved
- * (the same taps as Govorun), the pause from the notification, and a minute before «Остановить, если долго тихо» ends it, one
+ * (the same taps as Govorun), the recording pause, and a minute before «Остановить, если долго тихо» ends it, one
  * tap and the warning in the notification with «Продолжить». That tap comes in silence, so it does not cover any words.
  * [onChange] redraws the notification.
  */
@@ -43,7 +43,7 @@ internal class RecordingCues(
         handler.postDelayed(check, CHECK_MS)
     }
 
-    /** The person's pause from the notification: nothing is written meanwhile and silence does not count. */
+    /** The person's pause: nothing is written meanwhile and silence does not count. */
     fun pause(on: Boolean) {
         val at = RecordingBus.pausedAt.value
         if (on && at == null) RecordingBus.pausedAt.value = System.currentTimeMillis()

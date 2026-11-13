@@ -3,39 +3,34 @@ package com.govorun.echo.record
 import android.Manifest
 import android.app.Activity
 import android.app.KeyguardManager
+import android.app.role.RoleManager
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.util.Log
 import com.govorun.echo.AppEntry
+import com.govorun.echo.CapturePurpose
+import com.govorun.echo.commands.CommandStore
 
-/**
- * Echo as the phone's digital assistant, chosen in the system list next to Gemini or Алиса: holding the power button (or the
- * assistant gesture) starts a long recording and the next hold stops it, as the tile does. Android keeps the power button to
- * itself and never tells an app that it was let go, so "speak while holding" cannot be built on it. The activity shows over
- * the lock screen, so a recording starts without unlocking; when the microphone is not allowed yet it opens the app.
- */
+/** The system assistant gesture opens the same short, visible capture as «Сказать команду». */
 class AssistActivity : Activity() {
     /** The app is to open once the phone is unlocked; asked for when this window is on screen (see [onWindowFocusChanged]). */
     private var unlockPending = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val state = RecordingBus.state.value
-        when {
-            state is RecordingState.Recording || state is RecordingState.Starting -> {
-                Log.i(TAG, "event=assist_stop")
-                startService(RecordingService.stopIntent(this))
-            }
-            checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED -> return openApp()
-            else -> {
-                Log.i(TAG, "event=assist_start")
-                val start = runCatching { startForegroundService(RecordingService.startIntent(this, RecordingService.MODE_LONG)) }
-                start.exceptionOrNull()?.let {
-                    Log.w(TAG, "event=assist_start_rejected", it)
-                    return openApp()
-                }
-            }
+        if (intent.action != Intent.ACTION_ASSIST ||
+            getSystemService(RoleManager::class.java)?.isRoleHeld(RoleManager.ROLE_ASSISTANT) != true) {
+            finish()
+            return
         }
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED &&
+            CommandStore(this).commands().isNotEmpty()) return openApp()
+
+        val entry = AppEntry.recording(this, purpose = CapturePurpose.COMMAND)
+            .putExtra(AppEntry.TILE_RECORDING_EXTRA, true)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        runCatching { startActivity(entry) }.onFailure { Log.w(TAG, "event=assist_start_rejected", it) }
         finish()
     }
 

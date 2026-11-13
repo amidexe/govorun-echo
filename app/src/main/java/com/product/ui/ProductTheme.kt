@@ -1,5 +1,6 @@
 package com.product.ui
 
+import android.content.Context
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -141,14 +142,18 @@ fun ProductTheme(
     typography: Typography,
     content: @Composable () -> Unit,
 ) {
-    val usesDynamic = dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-    val colors = when {
-        usesDynamic && darkTheme -> readableDynamic(dynamicDarkColorScheme(LocalContext.current), true)
-        usesDynamic -> readableDynamic(dynamicLightColorScheme(LocalContext.current), false)
-        darkTheme -> DarkColors
+    val colors = productColorScheme(LocalContext.current, darkTheme, dynamicColor)
+    MaterialTheme(colors, ProductShapes, typography, content)
+}
+
+internal fun productColorScheme(context: Context, dark: Boolean, dynamic: Boolean): ColorScheme {
+    val usesDynamic = dynamic && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    return when {
+        usesDynamic && dark -> readableDynamic(dynamicDarkColorScheme(context), true)
+        usesDynamic -> readableDynamic(dynamicLightColorScheme(context), false)
+        dark -> DarkColors
         else -> LightColors
     }
-    MaterialTheme(colors, ProductShapes, typography, content)
 }
 
 /** Filled controls follow the current palette's primary and its contrasting foreground. */
@@ -156,13 +161,13 @@ fun ProductTheme(
 fun productButtonColors(): ButtonColors =
     ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primaryFixed, contentColor = MaterialTheme.colorScheme.onPrimaryFixed)
 
-/** DayPlan font metrics, reduced to six shared roles across all app surfaces. */
+/** Geist roles for the product chrome and note content. */
 fun productTypography(fontFamily: FontFamily): Typography {
-    val screenTitle = productTextStyle(fontFamily, FontWeight.SemiBold, 17.sp, 22.sp)
+    val screenTitle = productTextStyle(fontFamily, FontWeight.Normal, 17.sp, 22.sp)
     val title = productTextStyle(fontFamily, FontWeight.SemiBold, 15.sp, 20.sp)
     val body = productTextStyle(fontFamily, FontWeight.Normal, 14.sp, 20.sp)
     val caption = productTextStyle(fontFamily, FontWeight.Medium, 11.sp, 14.sp)
-    val action = productTextStyle(fontFamily, FontWeight.Medium, 13.sp, 18.sp)
+    val action = productTextStyle(fontFamily, FontWeight.Normal, 13.sp, 18.sp)
     val metric = productTextStyle(fontFamily, FontWeight.SemiBold, 22.sp, 28.sp)
     // Material controls and app Text calls resolve through the same small role set.
     return Typography(
@@ -175,9 +180,9 @@ fun productTypography(fontFamily: FontFamily): Typography {
         titleLarge = screenTitle,
         titleMedium = title,
         titleSmall = title,
-        bodyLarge = body,
+        bodyLarge = productTextStyle(fontFamily, FontWeight.Normal, 15.sp, 21.sp),
         bodyMedium = body,
-        bodySmall = caption,
+        bodySmall = action,
         labelLarge = action,
         labelMedium = caption,
         labelSmall = caption,

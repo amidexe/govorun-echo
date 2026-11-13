@@ -15,6 +15,9 @@
     <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <uses-permission android:name="android.permission.WRITE_CALENDAR" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Only to read the code on a computer's screen («На компьютере»), asked for the first time it is needed. -->
@@ -28,6 +31,13 @@
 
     <queries>
         <package android:name="com.govorun.lite" />
+        <intent><action android:name="android.intent.action.SET_TIMER" /></intent>
+        <intent><action android:name="android.intent.action.SET_ALARM" /></intent>
+        <intent><action android:name="android.intent.action.CREATE_REMINDER" /></intent>
+        <intent>
+            <action android:name="android.intent.action.INSERT" />
+            <data android:mimeType="vnd.android.cursor.item/event" />
+        </intent>
         <intent>
             <action android:name="com.govorun.api.RECOGNITION_SERVICE" />
         </intent>
@@ -64,12 +74,13 @@
                 android:resource="@xml/shortcuts" />
         </activity>
 
-        <activity
+        <activity android:name=".ui.ImportActivity" android:excludeFromRecents="true"
+            android:taskAffinity="" android:exported="false"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+        <activity-alias
             android:name=".record.ImportActivity"
-            android:excludeFromRecents="true"
-            android:taskAffinity=""
-            android:exported="true"
-            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            android:targetActivity=".ui.ImportActivity"
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -100,7 +111,7 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />
             </intent-filter>
-        </activity>
+        </activity-alias>
 
         <activity
             android:name=".record.QuickRecordActivity"
@@ -108,11 +119,12 @@
             android:exported="false"
             android:theme="@style/Theme.Echo.Capture" />
 
-        <!-- Puts Echo in the system list of digital assistants: holding the power button starts and stops a recording. -->
+        <!-- System UI invokes the chosen assistant for a short command. -->
         <activity
             android:name=".record.AssistActivity"
             android:excludeFromRecents="true"
             android:exported="true"
+            android:permission="android.permission.STATUS_BAR"
             android:showWhenLocked="true"
             android:taskAffinity="${applicationId}.assist"
             android:theme="@style/Theme.Echo.Capture">
@@ -121,6 +133,12 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".commands.CommandOpenActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.Echo.Capture" />
 
         <!-- Govorun's volume key on the lock screen: only Govorun (its signature permission) can open it. -->
         <activity
@@ -131,21 +149,12 @@
             android:permission="${govorunPackage}.permission.VOLUME_KEY"
             android:showWhenLocked="true"
             android:taskAffinity="${applicationId}.capture"
-            android:theme="@style/Theme.Echo.Capture">
+            android:theme="@style/Theme.Echo.RecordingEntry">
             <intent-filter>
                 <action android:name="com.govorun.api.VOLUME_KEY_RECORD" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
-        <activity
-            android:name=".record.CaptureActivity"
-            android:excludeFromRecents="true"
-            android:exported="false"
-            android:launchMode="singleTop"
-            android:showWhenLocked="true"
-            android:taskAffinity="${applicationId}.capture"
-            android:theme="@style/Theme.Echo.TileCapture" />
-
         <!-- A recording-only card may appear over the keyguard; the library remains in MainActivity. -->
         <activity
             android:name=".ui.TileRecordingActivity"
@@ -160,6 +169,34 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".ui.WidgetAppearanceActivity"
+            android:exported="true"
+            android:excludeFromRecents="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
+        <receiver
+            android:name=".widget.EchoWidget"
+            android:exported="false"
+            android:label="@string/widget_echo_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/echo_widget" />
+        </receiver>
+        <receiver
+            android:name=".widget.CommandWidget"
+            android:exported="false"
+            android:label="@string/widget_command_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/echo_command_widget" />
+        </receiver>
 
         <provider
             android:name="androidx.core.content.FileProvider"

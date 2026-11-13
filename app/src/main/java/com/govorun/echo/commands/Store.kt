@@ -3,6 +3,9 @@ package com.govorun.echo.commands
 import android.content.Context
 import com.govorun.echo.SecretStore
 import java.io.File
+import java.nio.file.FileAlreadyExistsException
+import java.nio.file.Files
+import java.nio.file.StandardOpenOption
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -17,10 +20,11 @@ object Recipes {
     private fun builtIn(context: Context): List<Recipe> =
         context.assets.list("recipes").orEmpty().sorted().mapNotNull { name ->
             runCatching { Recipe.parse(context.assets.open("recipes/$name").bufferedReader().readText()) }.getOrNull()
-        }
+        } + YandexHome.recipe(context)
 
     private fun user(context: Context): List<Recipe> =
-        File(context.filesDir, "recipes").listFiles().orEmpty().sortedBy { it.name }.mapNotNull { runCatching { Recipe.parse(it.readText()) }.getOrNull() }
+        File(context.filesDir, "recipes").listFiles().orEmpty().filter { it.extension == "json" }
+            .sortedBy { it.name }.mapNotNull { runCatching { Recipe.parse(it.readText()) }.getOrNull() }
 
     fun isUser(
         context: Context,
@@ -28,21 +32,41 @@ object Recipes {
     ): Boolean = File(File(context.filesDir, "recipes"), "$id.json").isFile
 
     /** Checks and keeps a recipe pasted by a person. Throws with a readable reason. */
+    @Synchronized
     fun addUser(
         context: Context,
         text: String,
     ): Recipe {
         val recipe = Recipe.parse(text)
-        require(builtIn(context).none { it.id == recipe.id }) { "Такой id уже занят встроенным рецептом" }
-        File(context.filesDir, "recipes").apply { mkdirs() }.resolve("${recipe.id}.json").writeText(text)
+        val reserved = builtIn(context).any { it.id == recipe.id } || CommandStore(context).referencesRecipe(recipe.id)
+        writeNewRecipe(File(context.filesDir, "recipes"), recipe, reserved)
         return recipe
     }
 
+    @Synchronized
     fun removeUser(
         context: Context,
         id: String,
     ) {
         File(File(context.filesDir, "recipes"), "$id.json").delete()
+    }
+}
+
+internal fun writeNewRecipe(directory: File, recipe: Recipe, reserved: Boolean) {
+    val conflict = "Этот id уже используется. Укажите новый id для своего рецепта."
+    require(!reserved) { conflict }
+    Files.createDirectories(directory.toPath())
+    val path = directory.resolve("${recipe.id}.json").toPath()
+    val output = try {
+        Files.newOutputStream(path, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
+    } catch (_: FileAlreadyExistsException) {
+        throw IllegalArgumentException(conflict)
+    }
+    try {
+        output.use { it.write(recipe.source.toByteArray(Charsets.UTF_8)) }
+    } catch (failure: java.io.IOException) {
+        Files.deleteIfExists(path)
+        throw failure
     }
 }
 
@@ -59,6 +83,11 @@ class CommandStore(
         val array = read().optJSONArray("commands") ?: return emptyList()
         return (0 until array.length()).mapNotNull { runCatching { Command.fromJson(array.getJSONObject(it)) }.getOrNull() }
     }
+
+    /** Deleted recipes may still have command bindings or settings from earlier versions. */
+    internal fun referencesRecipe(id: String): Boolean =
+        commands().any { it.recipeId == id } || read().optJSONObject("connections")?.has(id) == true ||
+            secrets.hasEntries("$id.")
 
     fun save(command: Command) {
         val root = read()

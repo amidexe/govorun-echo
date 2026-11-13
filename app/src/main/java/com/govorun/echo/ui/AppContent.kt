@@ -16,10 +16,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.setValue
 import com.govorun.echo.AppSettings
 import com.govorun.echo.notes.NoteStore
@@ -34,16 +39,39 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun MainActivity.App() {
     val ui = remember { NotesUiState(AppSettings.lastTag(this)) }
     LaunchedEffect(ui.filter.tag) { AppSettings.setLastTag(this@App, ui.filter.tag) }
     with(ui) {
+        // Keep the list itself alive while the animated navigation shows a note.
+        val (tagList, tagHeader) = key(tab, filter.tag) {
+            rememberLazyListState() to rememberTopAppBarState()
+        }
+        val tagOnly = query.isNullOrBlank() && filter == NotesFilter(tag = filter.tag)
+        val (notesList, notesHeader) = if (tagOnly) tagList to tagHeader else key(tab, filter.tag) {
+            rememberLazyListState() to rememberTopAppBarState()
+        }
+        var notesLoaded by remember { mutableStateOf(false) }
         val recordingState by RecordingBus.state.collectAsState()
         val scope = rememberCoroutineScope()
         val client = remember { RecognitionClient(this@App) }
+        LaunchedEffect(commandHistoryId, commandHistoryOpenVersion) {
+            if (commandHistoryId != null) screen = Screen.CommandHistory
+        }
         LaunchedEffect(asked) {
             asked?.let {
+                val command = withContext(Dispatchers.IO) {
+                    val dir = NoteStore.noteDir(this@App, it.id)
+                    runCatching { org.json.JSONObject(java.io.File(dir, "meta.json").readText()).has("command") }.getOrDefault(false)
+                }
+                if (command) {
+                    commandHistoryId = it.id
+                    screen = Screen.CommandHistory
+                    asked = null
+                    return@LaunchedEffect
+                }
                 if (it.byUser)
                     com.govorun.echo.notes.NoteSeen.set(
                         NoteStore.root(this@App),
@@ -60,7 +88,7 @@ internal fun MainActivity.App() {
         var licenseName by remember { mutableStateOf("") }
         var commandsVersion by remember { mutableIntStateOf(0) }
         var advancedMode by remember { mutableStateOf(AppSettings.advanced(this@App)) }
-        var versionTaps by remember { mutableIntStateOf(0) }
+        val settingsStateHolder = rememberSaveableStateHolder()
         var govorun by remember { mutableStateOf(GovorunState.Checking) }
         var govorunVersion by remember { mutableStateOf<String?>(null) }
         var install by remember { mutableStateOf(InstallInfo.cached(this@App)) }
@@ -88,7 +116,7 @@ internal fun MainActivity.App() {
             }
         val pickFiles =
             rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) {
-                if (com.govorun.echo.record.FileImport.picked(this@App, it)) changes++
+                if (ImportActivity.picked(this@App, it)) changes++
             }
 
         LaunchedEffect(Unit) {
@@ -124,6 +152,7 @@ internal fun MainActivity.App() {
                     hotkeyServiceOn = hotkeyServiceEnabled(this@App)
                     selected = selected.filter { id -> notes.any { it.id == id } }.toSet()
                     filter = filter.withoutStaleTag(notes, AppSettings.tags(this@App))
+                    notesLoaded = true
                     if (notes.any { it.isInProgress() }) {
                         RecordingBus.awaitLiveText(1_500)
                         continue
@@ -213,9 +242,8 @@ internal fun MainActivity.App() {
                     onboardingStep = OnboardingStep.Welcome
                     onboarding = true
                 },
-                onVersionTap = {
-                    if (++versionTaps >= UNLOCK_TAPS && !advancedMode)
-                        advancedMode = unlockAdvanced()
+                onUnlockExperiments = {
+                    if (!advancedMode) advancedMode = unlockAdvanced()
                 },
             )
         if (onboarding) {
@@ -263,7 +291,9 @@ internal fun MainActivity.App() {
                 }
                 screen == Screen.CommandEdit -> screen = Screen.Commands
                 screen == Screen.License -> screen = Screen.Licenses
-                screen == Screen.Commands || screen == Screen.Journal || screen == Screen.About ->
+                screen == Screen.CommandHistory -> { commandHistoryId = null; screen = Screen.Commands }
+                screen == Screen.Commands || screen == Screen.Journal || screen == Screen.About ||
+                    screen == Screen.Experiments ->
                     screen = Screen.Settings
                 screen == Screen.Licenses -> screen = Screen.About
                 screen != Screen.Notes -> screen = Screen.Notes
@@ -287,6 +317,9 @@ internal fun MainActivity.App() {
                     Screen.Notes -> {
                         NotesScreen(
                             notes,
+                            notesLoaded,
+                            notesList,
+                            notesHeader,
                             tab,
                             filter,
                             recordingState,
@@ -329,7 +362,7 @@ internal fun MainActivity.App() {
                             }
                         }
                     }
-                    Screen.Settings ->
+                    Screen.Settings -> settingsStateHolder.SaveableStateProvider("settings") {
                         SettingsRoute(
                             notes.size,
                             backupHost.changed,
@@ -340,10 +373,12 @@ internal fun MainActivity.App() {
                             advancedMode,
                             settingsActions,
                         )
+                    }
                     else ->
                         SecondaryScreens(
                             shown,
                             install,
+                            advancedMode,
                             licenseName,
                             editingCommand,
                             commandsVersion,

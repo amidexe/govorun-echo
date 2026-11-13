@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import com.govorun.echo.R
 import com.govorun.echo.commands.Recipe
 import com.govorun.echo.commands.Recipes
+import com.govorun.echo.commands.Runner
 import com.product.ui.productButtonColors
 
 /** What a recipe does, as written: to read, to copy as a starting point for your own, and to delete if it is yours. */
@@ -34,13 +35,30 @@ internal fun RecipeDialog(
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
+    var showJson by remember(recipe) { mutableStateOf(false) }
     val shown = remember(recipe) { runCatching { org.json.JSONObject(recipe.source).toString(2) }.getOrDefault(recipe.source) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(recipe.name) },
         text = {
-            Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
-                Text(shown, style = MaterialTheme.typography.bodySmall, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+            Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (showJson) {
+                    Text(shown, style = MaterialTheme.typography.bodySmall, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+                } else {
+                    for (action in recipe.actions) {
+                        Text(action.name, style = MaterialTheme.typography.titleSmall)
+                        if (action.request != null || action.intent != null) {
+                            val target = remember(action) { runCatching { Runner.destination(action, emptyMap()) }.getOrNull() }
+                            Text(target?.label ?: stringResource(R.string.commands_recipe_destination_setup),
+                                style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                    Text(stringResource(R.string.commands_recipe_use), style = MaterialTheme.typography.bodySmall)
+                }
+                TextButton(onClick = { showJson = !showJson }) {
+                    Text(stringResource(if (showJson) R.string.commands_recipe_hide_json else R.string.commands_recipe_show_json))
+                }
             }
         },
         confirmButton = {
@@ -51,10 +69,12 @@ internal fun RecipeDialog(
                         onDismiss()
                     }) { Text(stringResource(R.string.action_delete), color = MaterialTheme.colorScheme.error) }
                 }
-                TextButton(onClick = {
-                    context.getSystemService(android.content.ClipboardManager::class.java).setPrimaryClip(android.content.ClipData.newPlainText("recipe", shown))
-                    android.widget.Toast.makeText(context, R.string.toast_copied, android.widget.Toast.LENGTH_SHORT).show()
-                }) { Text(stringResource(R.string.action_copy)) }
+                if (showJson) {
+                    TextButton(onClick = {
+                        context.getSystemService(android.content.ClipboardManager::class.java).setPrimaryClip(android.content.ClipData.newPlainText("recipe", shown))
+                        android.widget.Toast.makeText(context, R.string.toast_copied, android.widget.Toast.LENGTH_SHORT).show()
+                    }) { Text(stringResource(R.string.action_copy)) }
+                }
                 TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) }
             }
         },
@@ -74,6 +94,7 @@ internal fun PasteRecipe(
         title = { Text(stringResource(R.string.commands_recipe_add)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(R.string.commands_recipe_import_hint), style = MaterialTheme.typography.bodySmall)
                 OutlinedTextField(text, { text = it; error = null }, Modifier.fillMaxWidth(), minLines = 6, maxLines = 12, label = { Text("JSON") })
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
             }

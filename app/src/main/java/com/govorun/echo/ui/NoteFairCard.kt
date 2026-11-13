@@ -2,7 +2,6 @@ package com.govorun.echo.ui
 
 import com.adamglin.phosphoricons.regular.ArrowUUpLeft
 import com.adamglin.phosphoricons.regular.PencilSimple
-import com.product.ui.CompactSwitch
 import android.content.Context
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.selection.selectable
@@ -63,6 +62,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.withContext
+import com.product.ui.ProductModalSheet
 
 
 /**
@@ -288,7 +288,10 @@ internal fun FairStyleSheet(
         }
         onPauseOrDispose { job.cancel() }
     }
-    androidx.compose.material3.ModalBottomSheet(onDismissRequest = { state.choosing = false }) {
+    ProductModalSheet(
+        onDismissRequest = { state.choosing = false },
+        sheetState = androidx.compose.material3.rememberModalBottomSheetState(),
+    ) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 24.dp).padding(bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(stringResource(R.string.fair_action), style = MaterialTheme.typography.titleMedium)
             if (SmartNetworkNotice()) return@Column

@@ -12,6 +12,8 @@ object Matcher {
 
     private fun normal(text: String) = text.lowercase().replace('ё', 'е')
 
+    internal fun phraseKey(phrase: String): List<String> = Regex("[\\p{L}\\p{N}]+\\*?").findAll(normal(phrase)).map { it.value }.toList()
+
     /**
      * The command whose phrase says the most (the longest phrase) among those the text fits; on a tie, the first
      * in the list. A command that wants the whole text only fits when nothing else was said; `*` after a word means
@@ -27,7 +29,7 @@ object Matcher {
         var best: Triple<Command, Int, Int>? = null
         for (command in commands) {
             for (phrase in command.phrases) {
-                val tokens = Regex("[\\p{L}\\p{N}]+\\*?").findAll(normal(phrase)).map { it.value }.toList()
+                val tokens = phraseKey(phrase)
                 if (tokens.isEmpty() || tokens.size > spoken.size) continue
                 if (!command.prefix && tokens.size != spoken.size) continue
                 val fits =

@@ -15,7 +15,6 @@ import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Regular
 import com.adamglin.phosphoricons.regular.Info
 import com.adamglin.phosphoricons.regular.Sparkle
-import com.adamglin.phosphoricons.regular.MagicWand
 import com.adamglin.phosphoricons.regular.SignIn
 import com.govorun.echo.AppSettings
 import com.govorun.echo.R
@@ -34,11 +33,11 @@ import kotlinx.coroutines.launch
 internal fun FairSettings() {
     val context = LocalContext.current
     if (!Smart.available) {
-        SettingsInfoRow(PhosphorIcons.Regular.MagicWand, stringResource(R.string.fair_action), stringResource(R.string.fair_settings_coming))
+        SettingsInfoRow(PhosphorIcons.Regular.Sparkle, stringResource(R.string.fair_action), stringResource(R.string.fair_settings_coming))
         return
     }
     val selected by Smart.optedIn.collectAsState()
-    SwitchRow(PhosphorIcons.Regular.MagicWand, R.string.smart_enable_title, R.string.smart_enable_text, selected) {
+    SwitchRow(PhosphorIcons.Regular.Sparkle, R.string.smart_enable_title, R.string.smart_enable_text, selected) {
         if (!Smart.choose(context, it)) android.widget.Toast.makeText(context, R.string.smart_choice_save_failed, android.widget.Toast.LENGTH_SHORT).show()
     }
     if (!selected) return

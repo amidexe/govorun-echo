@@ -32,7 +32,6 @@ internal fun PlayScreenSetting() {
     SettingsLinkRow(
         PhosphorIcons.Regular.Eye,
         stringResource(R.string.play_screen_title),
-        stringResource(R.string.play_screen_summary),
         value = label(value),
         onClick = { open = true },
     )

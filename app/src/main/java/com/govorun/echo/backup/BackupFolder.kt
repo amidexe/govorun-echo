@@ -5,6 +5,9 @@ import android.net.Uri
 import android.provider.DocumentsContract
 import android.util.Log
 import com.govorun.echo.AppSettings
+import com.govorun.echo.NetworkGate
+import com.govorun.echo.NetworkPolicy
+import com.govorun.echo.R
 import com.govorun.echo.export.Exporter
 import com.govorun.echo.export.ExportItem
 import com.govorun.echo.export.NoteMarkdown
@@ -17,7 +20,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 /**
  * Copies finished notes (text and audio) into a folder the owner picked in the system file
  * picker. Any storage app that offers folders there works: the phone's memory, a card, a cloud
- * drive app. Nothing is sent by this app itself and no account is needed. A note is copied again
+ * drive app. Access to a folder that may use the network follows NetworkPolicy. A note is copied again
  * when it changes (for example after "Дописать"); when only its words changed (a fix, its tags for
  * the Markdown copy), only its text files are written again, not its sound. With the experimental
  * Markdown copy each note also gets a `.md` for Obsidian ([NoteMarkdown]) beside its `.txt`.
@@ -33,11 +36,19 @@ object BackupFolder {
         val copied: Int,
         val total: Int,
         val lastError: String?,
+        val networkReason: String?,
     )
 
     private val executor = Executors.newSingleThreadExecutor()
     private val running = AtomicBoolean(false)
     private val again = AtomicBoolean(false)
+    private val waitingForNetwork = AtomicBoolean(false)
+
+    internal fun networkAvailable(context: Context) {
+        val tree = treeUri(context) ?: return
+        // Android's local folders already copy without a connection.
+        if (NetworkPolicy.folderRefusal(tree.authority) == null && waitingForNetwork.getAndSet(false)) syncAsync(context)
+    }
 
     fun treeUri(context: Context): Uri? = prefs(context).getString(KEY_TREE, null)?.let(Uri::parse)
 
@@ -63,13 +74,23 @@ object BackupFolder {
         if (!running.compareAndSet(false, true)) return
         executor.execute {
             try {
-                while (again.getAndSet(false)) runCatching { sync(app) }.onFailure { failure ->
-                    prefs(app).edit().putString(KEY_ERROR, if (failure is SecurityException) "no_access" else failure.message ?: "copy_failed").apply()
-                    Log.w(TAG, "event=folder_unavailable", failure)
+                while (again.getAndSet(false)) {
+                    val tree = treeUri(app) ?: break
+                    try {
+                        NetworkPolicy.withFolderAccess(tree.authority) { checkAccess -> sync(app, tree, checkAccess) }
+                    } catch (_: NetworkGate.Refused) {
+                        waitingForNetwork.set(true)
+                        // The route may already have recovered while the previous pass was unwinding.
+                        networkAvailable(app)
+                    } catch (failure: Exception) {
+                        prefs(app).edit().putString(KEY_ERROR, if (failure is SecurityException) "no_access" else failure.message ?: "copy_failed").apply()
+                        Log.w(TAG, "event=folder_unavailable", failure)
+                    }
                 }
             } finally {
                 running.set(false)
                 onFinished()
+                if (again.get()) syncAsync(app)
             }
         }
     }
@@ -80,7 +101,16 @@ object BackupFolder {
         val names = planNames(notes.map { it.first.name to it.second.optLong("startedAtMs") })
         val markdown = AppSettings.markdownCopy(context)
         val copied = if (tree == null) 0 else notes.count { (dir, meta) -> isCopied(meta, tree, wanted(dir, meta, meta.optJSONObject("backup")?.optString("base")?.takeIf { it.isNotBlank() } ?: names.getValue(dir.name), markdown)) }
-        return Status(tree?.let { folderName(context, it) }, copied, notes.size, prefs(context).getString(KEY_ERROR, null))
+        val name = tree?.let {
+            try {
+                NetworkPolicy.withFolderAccess(it.authority) { checkAccess ->
+                    checkAccess()
+                    folderName(context, it)
+                }
+            } catch (_: NetworkGate.Refused) { null }
+                ?: context.getString(R.string.backup_folder)
+        }
+        return Status(name, copied, notes.size, prefs(context).getString(KEY_ERROR, null), tree?.let { NetworkPolicy.folderRefusal(it.authority) })
     }
 
     private fun copyableNotes(context: Context): List<Pair<File, JSONObject>> =
@@ -128,11 +158,16 @@ object BackupFolder {
     /** Brings back the notes of the folder that this phone does not have (matched by the date in the file name). Returns how many. */
     fun restore(context: Context): Int {
         val tree = treeUri(context) ?: return 0
+        return NetworkPolicy.withFolderAccess(tree.authority) { checkAccess -> restore(context, tree, checkAccess) }
+    }
+
+    private fun restore(context: Context, tree: Uri, checkAccess: () -> Unit): Int {
         val resolver = context.contentResolver
         val rootDoc = DocumentsContract.buildDocumentUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree))
         val children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, DocumentsContract.getDocumentId(rootDoc))
         val files = mutableMapOf<String, MutableList<FolderFile>>()
         var detailsDoc: String? = null
+        checkAccess()
         resolver
             .query(children, arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null)
             ?.use { cursor ->
@@ -142,6 +177,7 @@ object BackupFolder {
                     files.getOrPut(base) { mutableListOf() } += FolderFile(base, rest.first, rest.second, cursor.getString(0))
                 }
             }
+        checkAccess()
         val details = detailsDoc?.let { FolderDetails.read(resolver, DocumentsContract.buildDocumentUriUsingTree(tree, it)) }
         Log.i(TAG, "event=restore files=${files.size} details=${details?.notes?.size ?: -1}")
         // The tags' colours and order come back to a phone that has none of its own yet.
@@ -165,7 +201,10 @@ object BackupFolder {
             var changed = false
             val sounds = files[base].orEmpty().filter { it.ext != "txt" }
             if (NoteStore.audioParts(meta).isEmpty() && meta.optString("mode") != com.govorun.echo.notes.NoteText.MODE && sounds.isNotEmpty()) {
-                runCatching { bringSound(resolver, tree, sounds, dir, meta) }.onSuccess { changed = true; restored++ }.onFailure { Log.w(TAG, "event=sound_restore_failed note=$base", it) }
+                checkAccess()
+                runCatching { bringSound(resolver, tree, sounds, dir, meta, checkAccess) }
+                    .onSuccess { changed = true; restored++ }
+                    .onFailure { if (it is NetworkGate.Refused) throw it; Log.w(TAG, "event=sound_restore_failed note=$base", it) }
             }
             val kept = details?.notes?.get(base)
             if (kept != null && meta.optString("mode") == "restored" && !meta.has("tags") && !meta.has("title")) {
@@ -178,6 +217,7 @@ object BackupFolder {
             if (base in have) continue
             val text = list.firstOrNull { it.ext == "txt" } ?: continue
             val startedAt = restoredStart(base) ?: continue
+            checkAccess()
             val (id, dir) = NoteStore.newNote(context)
             try {
                 File(dir, "text.txt").writeText(resolver.openInputStream(DocumentsContract.buildDocumentUriUsingTree(tree, text.id))?.use { it.readBytes().decodeToString() }.orEmpty())
@@ -188,14 +228,15 @@ object BackupFolder {
                         .put("durationMs", 0L)
                         .put("bytes", 0)
                         .put("state", NoteStore.STATE_DONE)
-                bringSound(resolver, tree, list.filter { it.ext != "txt" }, dir, meta)
+                bringSound(resolver, tree, list.filter { it.ext != "txt" }, dir, meta, checkAccess)
                 details?.notes?.get(base)?.let { FolderDetails.apply(meta, it) }
                 meta.put("backup", JSONObject().put("tree", tree.toString()).put("base", base).put("sig", signature(meta, textLength(dir))))
                 NoteStore.writeMeta(dir, meta)
                 restored++
             } catch (failure: Exception) {
-                Log.w(TAG, "event=restore_failed note=$base", failure)
                 dir.deleteRecursively()
+                if (failure is NetworkGate.Refused) throw failure
+                Log.w(TAG, "event=restore_failed note=$base", failure)
             }
         }
         return restored
@@ -208,11 +249,13 @@ object BackupFolder {
         sounds: List<FolderFile>,
         dir: File,
         meta: JSONObject,
+        checkAccess: () -> Unit,
     ) {
         if (sounds.isEmpty()) return
         val audio = JSONObject()
         var durationMs = 0L
         sounds.sortedBy { it.part }.forEachIndexed { index, f ->
+            checkAccess()
             val name = "%03d.%s".format(index, f.ext)
             val target = File(dir, "chunks/$name").apply { parentFile?.mkdirs() }
             resolver.openInputStream(DocumentsContract.buildDocumentUriUsingTree(tree, f.id))?.use { input -> target.outputStream().use { input.copyTo(it) } } ?: error("open_failed")
@@ -240,15 +283,17 @@ object BackupFolder {
         }.getOrDefault(0L)
 
     /** One pass over all notes; returns when everything copyable is copied or the first hard error hit. */
-    private fun sync(context: Context) {
-        val tree = treeUri(context) ?: return
+    private fun sync(context: Context, tree: Uri, checkAccess: () -> Unit) {
         val resolver = context.contentResolver
         val rootDoc = DocumentsContract.buildDocumentUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree))
         val notes = copyableNotes(context)
         val markdown = AppSettings.markdownCopy(context)
-        hideFromMedia(resolver, tree, rootDoc)
+        checkAccess()
+        hideFromMedia(resolver, tree, rootDoc, checkAccess)
         // The folder is listed once a pass: listing it again for every note made a thousand notes' first copy take minutes.
+        checkAccess()
         val present = listed(resolver, tree, rootDoc)
+        checkAccess()
         val knownNames = FolderDetails.bases(resolver, present, tree)
         val planned = planNames(notes.map { it.first.name to it.second.optLong("startedAtMs") })
         val names = notes.associate { (dir, meta) -> dir.name to (meta.optJSONObject("backup")?.takeIf { it.optString("tree") == tree.toString() }?.optString("base")?.takeIf { it.isNotBlank() }
@@ -261,20 +306,24 @@ object BackupFolder {
             val want = wanted(dir, meta, base, markdown)
             val expectedNames = listOfNotNull("$base.txt", "$base.md".takeIf { want.markdown != null }) + want.sounds.map { it.second }
             if (isCopied(meta, tree, want) && expectedNames.all { it in present }) { completed += dir to meta; continue }
+            checkAccess()
             try {
                 // A note without its sound on the phone (back from Google's backup as text, or its sound let go) never takes the
                 // folder's sound with it: only a new sound replaces an old one.
-                FolderOwnership.check(resolver, present, meta, tree, base, markdown)
-                val previous = JSONObject().apply { present.filterKeys { it == "$base.txt" || it == "$base.md" || it.startsWith("${base}_") || it.substringBeforeLast('.') == base }.forEach { (name, uri) -> put(name, FolderOwnership.hash(resolver, uri)) } }
+                FolderOwnership.check(resolver, present, meta, tree, base, markdown, checkAccess)
+                val previous = JSONObject().apply { present.filterKeys { it == "$base.txt" || it == "$base.md" || it.startsWith("${base}_") || it.substringBeforeLast('.') == base }.forEach { (name, uri) -> put(name, FolderOwnership.hash(resolver, uri, checkAccess)) } }
                 val desired = JSONObject().put("$base.txt", CopyReceipt.hash(want.text.toByteArray())).apply {
                     want.markdown?.let { put("$base.md", CopyReceipt.hash(it.toByteArray())) }
                     want.sounds.forEach { (file, name) -> put(name, com.govorun.echo.backup.PortableArchive.sha(file)) }
                 }
                 NoteStore.updateMeta(dir, touched = false) { put("backupPending", JSONObject().put("tree", tree.toString()).put("base", base).put("previous", previous).put("documents", desired)) }
-                if ((soundCopied(meta, tree, want) && want.sounds.all { it.second in present }) || want.sounds.isEmpty()) copyText(resolver, present, rootDoc, base, want) else copyNote(resolver, present, rootDoc, base, want)
-                val record = record(tree, meta, dir, want).put("base", base).put("documents", JSONObject(meta.optJSONObject("backup")?.optJSONObject("documents")?.toString() ?: "{}").apply { expectedNames.forEach { name -> present[name]?.let { put(name, FolderOwnership.hash(resolver, it)) } } })
+                if ((soundCopied(meta, tree, want) && want.sounds.all { it.second in present }) || want.sounds.isEmpty()) writeText(resolver, present, rootDoc, base, want, checkAccess) else copyNote(resolver, present, rootDoc, base, want, checkAccess)
+                checkAccess()
+                val record = record(tree, meta, dir, want).put("base", base).put("documents", JSONObject(meta.optJSONObject("backup")?.optJSONObject("documents")?.toString() ?: "{}").apply { expectedNames.forEach { name -> present[name]?.let { put(name, FolderOwnership.hash(resolver, it, checkAccess)) } } })
                 NoteStore.updateMeta(dir, touched = false) { put("backup", record); remove("backupPending") }
                 completed += dir to meta
+            } catch (refused: NetworkGate.Refused) {
+                throw refused
             } catch (failure: SecurityException) {
                 error = "no_access"
                 Log.w(TAG, "event=no_access", failure)
@@ -285,8 +334,9 @@ object BackupFolder {
             }
         }
         if (error != "no_access") {
-            runCatching { FolderDetails.write(resolver, present, rootDoc, tree, completed, names, AppSettings.tagBackup(context)) }
-                .onFailure { error = error ?: (it.message ?: it.javaClass.simpleName); Log.w(TAG, "event=details_failed", it) }
+            checkAccess()
+            runCatching { FolderDetails.write(resolver, present, rootDoc, tree, completed, names, AppSettings.tagBackup(context), checkAccess) }
+                .onFailure { if (it is NetworkGate.Refused) throw it; error = error ?: (it.message ?: it.javaClass.simpleName); Log.w(TAG, "event=details_failed", it) }
         }
         prefs(context).edit().apply { if (error == null) remove(KEY_ERROR) else putString(KEY_ERROR, error) }.apply()
         if (error != null) com.govorun.echo.Journal.add(context, com.govorun.echo.Journal.BACKUP, context.getString(com.govorun.echo.R.string.journal_backup_failed))
@@ -306,24 +356,15 @@ object BackupFolder {
         rootDoc: Uri,
         base: String,
         want: Wanted,
+        checkAccess: () -> Unit,
     ) {
-        want.sounds.forEach { (file, name) -> write(resolver, present, rootDoc, mimeOf(file.extension), name) { out -> file.inputStream().use { it.copyTo(out) } } }
-        writeText(resolver, present, rootDoc, base, want)
+        want.sounds.forEach { (file, name) -> SafeFolderWrite.write(resolver, present, rootDoc, mimeOf(file.extension), name, checkAccess) { out -> file.inputStream().use { it.copyTo(out) } } }
+        writeText(resolver, present, rootDoc, base, want, checkAccess)
         val keep = want.sounds.map { it.second }.toSet()
         present.keys.filter { it !in keep && Regex("^" + Regex.escape(base) + "(_\\d+)?\\.(" + com.govorun.echo.audio.AudioFormats.PATTERN + ")$").matches(it) }.toList().forEach { name ->
+            checkAccess()
             check(DocumentsContract.deleteDocument(resolver, present.getValue(name))) { "delete_failed" }; present.remove(name)
         }
-    }
-
-    /** Only the words changed: the text files go again, the sound already in the folder stays. */
-    private fun copyText(
-        resolver: android.content.ContentResolver,
-        present: MutableMap<String, Uri>,
-        rootDoc: Uri,
-        base: String,
-        want: Wanted,
-    ) {
-        writeText(resolver, present, rootDoc, base, want)
     }
 
     private fun writeText(
@@ -332,29 +373,20 @@ object BackupFolder {
         rootDoc: Uri,
         base: String,
         want: Wanted,
+        checkAccess: () -> Unit,
     ) {
-        write(resolver, present, rootDoc, "text/plain", "$base.txt") { it.write(want.text.toByteArray()) }
-        want.markdown?.let { md -> write(resolver, present, rootDoc, "text/markdown", "$base.md") { it.write(md.toByteArray()) } }
+        SafeFolderWrite.write(resolver, present, rootDoc, "text/plain", "$base.txt", checkAccess) { it.write(want.text.toByteArray()) }
+        want.markdown?.let { md -> SafeFolderWrite.write(resolver, present, rootDoc, "text/markdown", "$base.md", checkAccess) { it.write(md.toByteArray()) } }
     }
 
     private fun mimeOf(extension: String) = com.govorun.echo.audio.AudioFormats.mimeOf(extension)
-
-    private fun write(
-        resolver: android.content.ContentResolver,
-        present: MutableMap<String, Uri>,
-        parent: Uri,
-        mime: String,
-        name: String,
-        body: (java.io.OutputStream) -> Unit,
-    ) {
-        SafeFolderWrite.write(resolver, present, parent, mime, name, body)
-    }
 
     /** An empty `.nomedia` keeps the copied sound out of the gallery and music players; the files themselves stay as they are. */
     private fun hideFromMedia(
         resolver: android.content.ContentResolver,
         tree: Uri,
         rootDoc: Uri,
+        checkAccess: () -> Unit,
     ) {
         runCatching {
             val children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, DocumentsContract.getDocumentId(rootDoc))
@@ -364,7 +396,10 @@ object BackupFolder {
                     while (cursor.moveToNext()) if (cursor.getString(0) == NO_MEDIA) found = true
                     found
                 } ?: false
-            if (!present) DocumentsContract.createDocument(resolver, rootDoc, "application/octet-stream", NO_MEDIA)
+            if (!present) {
+                checkAccess()
+                DocumentsContract.createDocument(resolver, rootDoc, "application/octet-stream", NO_MEDIA)
+            }
         }
     }
 
@@ -398,7 +433,7 @@ object BackupFolder {
     private fun copyable(
         dir: File,
         meta: JSONObject,
-    ) = meta.optString("state") == NoteStore.STATE_DONE && File(dir, "text.txt").exists()
+    ) = !com.govorun.echo.notes.CommandHistory.isCommand(meta) && meta.optString("state") == NoteStore.STATE_DONE && File(dir, "text.txt").exists()
 
     private fun isCopied(
         meta: JSONObject,

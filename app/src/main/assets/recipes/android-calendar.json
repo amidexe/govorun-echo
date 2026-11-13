@@ -1,0 +1,18 @@
+{
+  "id": "android-calendar",
+  "name": "Календарь Android",
+  "actions": [
+    {
+      "id": "event",
+      "name": "Событие через Говорун",
+      "android": { "kind": "event_draft", "text": "{{rest}}" },
+      "needsRest": true
+    },
+    {
+      "id": "reminder",
+      "name": "Подготовить напоминание",
+      "android": { "kind": "reminder", "text": "{{rest}}" },
+      "needsRest": true
+    }
+  ]
+}

@@ -27,6 +27,7 @@ import com.govorun.echo.backup.ArchiveRestore
 import com.govorun.echo.backup.UserTransfer
 import com.product.ui.SettingsLinkRow
 import com.product.ui.SettingsSection
+import com.product.ui.ProductNavigationButton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -52,7 +53,20 @@ class TransferActivity:ComponentActivity() {
         val state by model.state.collectAsState()
         val busy=state.busy;val message=state.message;val pending=state.pending;val settings=state.settings
         BackHandler {back()}
-        Scaffold(topBar={TopAppBar(title={Text(stringResource(R.string.transfer_title))},navigationIcon={IconButton(onClick=::back,enabled=!busy){Icon(PhosphorIcons.Regular.ArrowLeft,stringResource(R.string.action_back))}})}) { padding ->
+        Scaffold(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            topBar = {
+                TopAppBar(
+                    title = { Text(stringResource(R.string.transfer_title)) },
+                    navigationIcon = {
+                        ProductNavigationButton(
+                            PhosphorIcons.Regular.ArrowLeft, stringResource(R.string.action_back), ::back, enabled = !busy,
+                        )
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                )
+            },
+        ) { padding ->
             Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(18.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
                 Text(stringResource(R.string.transfer_description),style=MaterialTheme.typography.bodyMedium)
                 SettingsSection(stringResource(R.string.transfer_full)) {
@@ -68,7 +82,7 @@ class TransferActivity:ComponentActivity() {
                 Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {
                     Text(getString(R.string.transfer_preview_counts,value.plan.count(ArchiveRestore.Kind.New),value.plan.count(ArchiveRestore.Kind.Enrich),value.plan.count(ArchiveRestore.Kind.Same),value.plan.count(ArchiveRestore.Kind.Conflict),value.plan.count(ArchiveRestore.Kind.Damaged)))
                     Text(stringResource(R.string.transfer_preserve))
-                    if(value.plan.count(ArchiveRestore.Kind.Conflict)+value.plan.count(ArchiveRestore.Kind.Damaged)>0) Text(value.plan.units.filter{it.isNote && (it.kind==ArchiveRestore.Kind.Conflict || it.kind==ArchiveRestore.Kind.Damaged)}.take(20).joinToString("\n"){it.label()})
+                    if(value.plan.count(ArchiveRestore.Kind.Conflict)+value.plan.count(ArchiveRestore.Kind.Damaged)>0) Text(value.plan.units.filter{(it.kind==ArchiveRestore.Kind.Conflict || it.kind==ArchiveRestore.Kind.Damaged)}.take(20).joinToString("\n"){it.label()})
                     Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){Checkbox(checked=settings,onCheckedChange={model.settings(it)},enabled=!busy);Text(stringResource(R.string.transfer_settings))}
                 }
             },confirmButton={TextButton(enabled=!busy,onClick={

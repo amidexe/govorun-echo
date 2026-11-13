@@ -60,7 +60,6 @@ internal class NotesActions(
     val onPlayFrom: (String, Long) -> Unit,
     val onAppend: (String) -> Unit,
     val onDeleteAudio: (String) -> Unit,
-    val onRetryCommand: (String) -> Unit,
     val onArchive: (List<String>, Boolean) -> Unit,
     val onExport: (List<String>) -> Unit,
     val onRequestMicrophone: () -> Unit,

@@ -5,6 +5,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 import com.govorun.echo.audio.Pcm
+import com.govorun.echo.CapturePurpose
 
 /** One folder per note: `meta.json` plus `chunks/NNN.pcm` (raw 16 kHz mono PCM). */
 object NoteStore {
@@ -107,7 +108,7 @@ object NoteStore {
     fun noteDir(
         context: Context,
         id: String,
-    ): File = File(root(context), id)
+    ): File = CommandHistory.directory(context, id)
 
     /** Archived notes are kept for good: they leave the main list and the auto-delete never touches them. */
     fun setArchived(
@@ -365,7 +366,6 @@ object NoteStore {
         val archived: Boolean = false,
         /** Favorite marker. The legacy metadata key remains pinned; favorites stay in chronology. */
         val pinned: Boolean = false,
-        val command: CommandResult? = null,
         /** Text is ready, the compressed audio is still being written, so the player will appear. */
         val archiving: Boolean = false,
         val tags: List<String> = emptyList(),
@@ -422,14 +422,6 @@ object NoteStore {
     fun appendsOf(array: org.json.JSONArray?): List<Append> =
         array?.let { a -> (0 until a.length()).mapNotNull { a.optJSONObject(it) }.map { Append(it.optLong("atMs"), it.optInt("textAt")) } }.orEmpty()
 
-    @androidx.compose.runtime.Immutable
-    data class CommandResult(
-        val name: String,
-        val ok: Boolean,
-        val label: String,
-        val reply: String,
-    )
-
     /** Compressed chunks of a note in playback order, with their lengths. */
     fun audioParts(meta: JSONObject): List<AudioPart> {
         val audio = meta.optJSONObject("audio") ?: return emptyList()
@@ -458,6 +450,11 @@ object NoteStore {
                     val stamp = metaFile.lastModified() * 31 + metaFile.length() + textFile.lastModified() + textFile.length()
                     cache[dir.name]?.takeIf { it.stamp == stamp }?.let { return@runCatching it.entry }
                     val meta = JSONObject(metaFile.readText())
+                    if (CommandHistory.isCommand(meta)) {
+                        if (meta.optString("state") == STATE_DONE && !pcmFile(dir).exists() && meta.getJSONObject("command").optString("phase") !in setOf("processing", "dispatching")) CommandHistory.separate(context, dir)
+                        return@runCatching null
+                    }
+                    if (CapturePurpose.read(meta) == CapturePurpose.COMMAND) return@runCatching null
                     val state = meta.optString("state", STATE_RECORDED)
                     val entry =
                         Entry(
@@ -474,10 +471,6 @@ object NoteStore {
                             archived = meta.optBoolean("archived"),
                             pinned = meta.optBoolean("pinned"), unseen = if (meta.has("unseen")) meta.optBoolean("unseen") else null,
                             tags = meta.optJSONArray("tags")?.let { array -> (0 until array.length()).map { array.getString(it) } }.orEmpty(),
-                            command =
-                                meta.optJSONObject("command")?.let {
-                                    CommandResult(it.optString("name"), it.optBoolean("ok"), it.optString("label"), it.optString("reply"))
-                                },
                             archiving = state == STATE_DONE && pcmFile(dir).exists(),
                             appending = meta.has("appendFromMs"),
                             canSplit = NoteSplit.canSplit(meta),
@@ -492,7 +485,7 @@ object NoteStore {
                             timed = File(dir, "segments.json").length() > 2,
                             recognizedMs = meta.optLong("recognizedMs"), totalMs = meta.optLong("totalMs"), queued = meta.optBoolean("queued"), preparedMs = meta.optLong("preparedMs"),
                         ).let { it.copy(card = NoteCard.of(meta.optJSONObject("card"), it.text), brief = NoteBrief.of(meta.optJSONObject("brief"), it.text), fair = NoteFair.of(meta.optJSONObject("fair"), it.text), itogi = NoteItogi.of(meta.optJSONObject("itogi"), it.text)) }
-                    if ((state == STATE_DONE && !entry.archiving) || state == STATE_FAILED) cache[dir.name] = Cached(stamp, entry)
+                    if (((state == STATE_DONE && !entry.archiving) || state == STATE_FAILED)) cache[dir.name] = Cached(stamp, entry)
                     entry
                 }.getOrNull()
             }.sortedByDescending { it.startedAtMs }

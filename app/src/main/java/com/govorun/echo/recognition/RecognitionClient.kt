@@ -71,16 +71,24 @@ internal const val ERROR_PREEMPTED = 9
 internal const val FAILED_BIND = -1
 internal const val FAILED_PROTOCOL = -2
 internal const val FAILED_BINDER = -3
+internal const val FAILED_FILE_FILTER_UNSUPPORTED = -5
 private const val CAPABILITY_CONTINUOUS_PROFILES = 1
 private const val CAPABILITY_WORD_TIMESTAMPS = 1 shl 3
 private const val CAPABILITY_SHARED_ENGINE = 1 shl 4
 private const val CONTINUOUS_FLAG_WORD_TIMESTAMPS = 1 shl 16
 private const val CAPABILITY_FILE_AUDIO_COVERAGE = 1 shl 6
+private const val CAPABILITY_FILE_SPEECH_FILTER = 1 shl 7
+private const val CONTINUOUS_FLAG_FILE_SPEECH_FILTER = 1 shl 18
 
 /** Ask a supporting Govorun to keep all file audio, including speech its live VAD would miss. */
-internal fun fileRecognitionProfile(capabilities: Int): Int =
+internal fun fileRecognitionProfile(capabilities: Int, speechFilter: Boolean = false): Int =
     (if (capabilities and CAPABILITY_WORD_TIMESTAMPS != 0) CONTINUOUS_FLAG_WORD_TIMESTAMPS else 0) or
-        (if (capabilities and CAPABILITY_FILE_AUDIO_COVERAGE != 0) 2 else 0)
+        (if (capabilities and CAPABILITY_FILE_AUDIO_COVERAGE != 0) 2 else 0) or
+        (if (speechFilter && supportsFileSpeechFilter(capabilities)) CONTINUOUS_FLAG_FILE_SPEECH_FILTER else 0)
+
+internal fun supportsFileSpeechFilter(capabilities: Int): Boolean =
+    capabilities and (CAPABILITY_CONTINUOUS_PROFILES or CAPABILITY_FILE_AUDIO_COVERAGE or CAPABILITY_FILE_SPEECH_FILTER) ==
+        (CAPABILITY_CONTINUOUS_PROFILES or CAPABILITY_FILE_AUDIO_COVERAGE or CAPABILITY_FILE_SPEECH_FILTER)
 private const val MAX_TIMED_FILE_BYTES = 40L * 60 * 32_000
 
 /** A file this short is one phrase for any Govorun; a longer one is made of many and costs Govorun memory unless it is segmented. */
@@ -93,7 +101,8 @@ internal const val SHORT_FILE_BYTES = 30L * 32_000
 internal fun sendsAsStream(
     fileBytes: Long,
     continuousSupported: Boolean,
-): Boolean = fileBytes > SHORT_FILE_BYTES && continuousSupported
+    speechFilter: Boolean = false,
+): Boolean = (fileBytes > SHORT_FILE_BYTES || speechFilter) && continuousSupported
 
 /** Client of the Govorun Recognition API v1 (local Binder, no network). */
 class RecognitionClient(
@@ -127,7 +136,10 @@ class RecognitionClient(
                 return@withService Outcome.NeedsAuthorization
             }
             val capabilities = service.capabilities
-            val asStream = sendsAsStream(file.length(), service.supportsContinuousRecognition())
+            if (feed?.fileSpeechFilter == true && !supportsFileSpeechFilter(capabilities)) return@withService Outcome.Failed(FAILED_FILE_FILTER_UNSUPPORTED)
+            val continuous = service.supportsContinuousRecognition()
+            if (feed?.fileSpeechFilter == true && !continuous) return@withService Outcome.Failed(FAILED_FILE_FILTER_UNSUPPORTED)
+            val asStream = sendsAsStream(file.length(), continuous, feed?.fileSpeechFilter == true)
             android.util.Log.i("RecognitionClient", "event=file_path path=${if (asStream) "stream" else "file"} seconds=${file.length() / NoteStore.BYTES_PER_SECOND} capabilities=$capabilities")
             if (asStream) return@withService recognizeAsStream(service, lost, file, capabilities, feed)
             val sessionId = UUID.randomUUID().toString()
@@ -263,7 +275,7 @@ class RecognitionClient(
         val pipe = if (feed != null) ParcelFileDescriptor.createPipe() else null
         (pipe?.get(0) ?: ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)).use { descriptor ->
             if (capabilities and CAPABILITY_CONTINUOUS_PROFILES != 0) {
-                val flag = fileRecognitionProfile(capabilities)
+                val flag = fileRecognitionProfile(capabilities, feed?.fileSpeechFilter == true)
                 service.recognizeContinuousWithProfile(appContext.packageName, sessionId, descriptor, SAMPLE_RATE, 1, 16, flag, callback)
             } else {
                 service.recognizeContinuous(appContext.packageName, sessionId, descriptor, SAMPLE_RATE, 1, 16, callback)
@@ -302,6 +314,9 @@ class RecognitionClient(
     }
 
     private var sharedEngineCache: Pair<Long, Boolean>? = null
+
+    suspend fun supportsFileSpeechFilter(): Boolean =
+        withService({ false }) { service, _ -> supportsFileSpeechFilter(service.capabilities) }
 
     /**
      * Whether Govorun serves several sessions at once (a recording and a file together). Asked rarely: the answer changes only when

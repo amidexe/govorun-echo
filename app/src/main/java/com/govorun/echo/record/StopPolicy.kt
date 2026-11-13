@@ -14,6 +14,12 @@ internal object StopPolicy {
     /** How long before a silence stop the person is told, so a tap on «Продолжить» keeps the recording going. */
     const val SILENCE_WARNING_MS = 60_000L
 
+    fun commandReason(heardSpeech: Boolean, idleMs: Long): String? = when {
+        heardSpeech && idleMs >= 1_800L -> RecordingService.STOP_COMMAND_PAUSE
+        !heardSpeech && idleMs >= 5_000L -> RecordingService.STOP_COMMAND_NO_SPEECH
+        else -> null
+    }
+
     @Suppress("UNUSED_PARAMETER")
     fun reason(
         mode: String,

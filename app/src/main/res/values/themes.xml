@@ -4,15 +4,18 @@
         <item name="android:windowNoTitle">true</item>
     </style>
     <style name="Theme.Echo.Capture" parent="@android:style/Theme.Translucent.NoTitleBar" />
-    <!-- The tile's brief microphone entry is transparent, with no full-screen preview or transition. -->
-    <style name="Theme.Echo.TileCapture" parent="Theme.Echo.Capture">
-        <item name="android:windowAnimationStyle">@null</item>
-        <item name="android:windowDisablePreview">true</item>
+    <!-- The translucent recording surface keeps the previous task visible. -->
+    <style name="Theme.Echo.RecordingEntry" parent="Theme.Echo.Capture">
+        <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:backgroundDimEnabled">false</item>
-    </style>
-    <!-- An opaque recording-only screen cannot reveal the previous app above the keyguard. -->
-    <style name="Theme.Echo.RecordingEntry" parent="Theme.Echo">
         <item name="android:windowAnimationStyle">@null</item>
         <item name="android:windowDisablePreview">true</item>
+    </style>
+    <style name="Theme.Echo.TileDialog" parent="@android:style/Theme.Material.Dialog.NoActionBar">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:windowMinWidthMajor">100%</item>
+        <item name="android:windowMinWidthMinor">100%</item>
     </style>
 </resources>

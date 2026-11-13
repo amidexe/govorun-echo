@@ -31,11 +31,9 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -60,6 +58,7 @@ import com.govorun.echo.AppSettings
 import com.govorun.echo.R
 import com.govorun.echo.web.ComputerSession
 import com.govorun.echo.web.WebExport
+import com.product.ui.ProductModalSheet
 
 /** Where the page lives; the same address the QR code's link opens. */
 internal const val COMPUTER_ADDRESS = "echo.govorun.club"
@@ -124,7 +123,7 @@ internal fun ComputerSheet(
         confirmButton = { TextButton(onClick = { details = false }) { Text(stringResource(R.string.action_done)) } },
         dismissButton = { TextButton(enabled = network.reason == null, onClick = { details = false; onScan(active.selection) }) { Text(stringResource(R.string.computer_scan_other)) } },
     )
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+    ProductModalSheet(onDismissRequest = onDismiss) {
         Column(
             Modifier.navigationBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),

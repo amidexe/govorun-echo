@@ -130,6 +130,7 @@ fun FeedSectionHeader(
 
 @Composable
 fun ProductDivider() {
+    if (LocalProductRowGroup.current) return
     HorizontalDivider(
         modifier = Modifier.padding(horizontal = ProductTokens.Spacing.Section),
         color = MaterialTheme.colorScheme.outlineVariant.copy(

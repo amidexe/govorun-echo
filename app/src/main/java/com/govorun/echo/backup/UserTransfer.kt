@@ -42,6 +42,7 @@ internal object UserTransfer {
     }
     private fun checkQuiet(context:Context) {
         check(NoteStore.list(context).none { it.state==NoteStore.STATE_RECORDING || it.appending || it.archiving || it.state==NoteStore.STATE_RECOGNIZING }) {"recording_or_processing"}
+        check(com.govorun.echo.notes.CommandHistory.entries(context).none { it.result.phase in setOf("processing", "dispatching") }) { "command_processing" }
         // A future authoritative database must get a real SQLite snapshot adapter; silently omitting it is forbidden.
         UserFiles.requireSupportedDatabases(context)
     }

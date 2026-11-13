@@ -22,6 +22,8 @@ data class Action(
     val reply: String?,
     /** The action needs what is said after the phrase (a task, a message), so the phrase may be only a beginning. */
     val needsRest: Boolean = false,
+    val android: AndroidCommand? = null,
+    internal val yandexScenario: Boolean = false,
 )
 
 /** A way to talk to a service, written as data (see docs/RECIPES.md). */
@@ -38,6 +40,24 @@ data class Recipe(
     companion object {
         /** Throws [IllegalArgumentException] with a readable reason when the text is not a usable recipe. */
         fun parse(text: String): Recipe {
+            require(text.length <= 65_536) { "Рецепт слишком большой" }
+            // Check nesting before JSONObject reads this untrusted input recursively.
+            var depth = 0
+            var quoted = false
+            var escaped = false
+            for (char in text) {
+                if (quoted) {
+                    if (escaped) escaped = false
+                    else if (char == '\\') escaped = true
+                    else if (char == '"') quoted = false
+                } else when (char) {
+                    '"' -> quoted = true
+                    '{', '[' -> require(++depth <= 32) { "Рецепт слишком глубоко вложен" }
+                    '}', ']' -> require(--depth >= 0) { "Это не JSON" }
+                    '\'', '/', '#', '\\' -> throw IllegalArgumentException("Это не JSON")
+                }
+            }
+            require(!quoted && depth == 0) { "Это не JSON" }
             val json =
                 try {
                     JSONObject(text)
@@ -48,6 +68,7 @@ data class Recipe(
             require(id.matches(Regex("[a-z0-9][a-z0-9_-]{0,39}"))) { "Нужен id из латинских букв, цифр и дефиса" }
             val actions = json.optJSONArray("actions") ?: JSONArray()
             require(actions.length() > 0) { "Нужно хотя бы одно действие в actions" }
+            require(actions.length() <= 32) { "В одном рецепте может быть до 32 действий" }
             return Recipe(
                 id = id,
                 name = json.optString("name").ifBlank { id },
@@ -57,7 +78,8 @@ data class Recipe(
                         val item = actions.getJSONObject(index)
                         val request = item.optJSONObject("request")
                         val intent = item.optJSONObject("intent")
-                        require(request != null || intent != null) { "У действия ${index + 1} нет request или intent" }
+                        val android = if (request == null && intent == null) AndroidCommand.fromJson(item) else null
+                        require(request != null || intent != null || android != null) { "У действия ${index + 1} нет request, intent или android" }
                         require(request == null || request.optString("url").isNotBlank()) { "У действия ${index + 1} нет url" }
                         Action(
                             id = item.optString("id").ifBlank { "action${index + 1}" },
@@ -67,17 +89,21 @@ data class Recipe(
                             intent = intent,
                             reply = item.optString("reply").ifBlank { null },
                             needsRest = item.optBoolean("needsRest"),
+                            android = android,
                         )
                     },
                 source = text,
             )
         }
 
-        private fun fields(array: JSONArray?): List<Field> =
-            (0 until (array?.length() ?: 0)).map {
-                val item = array!!.getJSONObject(it)
+        private fun fields(array: JSONArray?): List<Field> {
+            if (array == null) return emptyList()
+            require(array.length() <= 32) { "В одном списке может быть до 32 полей" }
+            return (0 until array.length()).map {
+                val item = array.getJSONObject(it)
                 Field(item.getString("id"), item.optString("label").ifBlank { item.getString("id") }, item.optBoolean("secret"), item.optString("hint"))
             }
+        }
     }
 }
 
@@ -92,6 +118,8 @@ data class Command(
     val discard: Boolean = true,
     /** True: the phrase may be only the beginning of what is said. False: the whole text must be the phrase. */
     val prefix: Boolean = true,
+    val notifyResult: Boolean = true,
+    val blockOnLockScreen: Boolean = false,
 ) {
     fun toJson(): JSONObject =
         JSONObject()
@@ -103,6 +131,8 @@ data class Command(
             .put("values", JSONObject(values))
             .put("discard", discard)
             .put("prefix", prefix)
+            .put("notifyResult", notifyResult)
+            .put("blockOnLockScreen", blockOnLockScreen)
 
     companion object {
         fun fromJson(json: JSONObject): Command {
@@ -117,6 +147,8 @@ data class Command(
                 values = values?.keys()?.asSequence()?.associateWith { values.getString(it) } ?: emptyMap(),
                 discard = json.optBoolean("discard", true),
                 prefix = json.optBoolean("prefix", true),
+                notifyResult = json.optBoolean("notifyResult", true),
+                blockOnLockScreen = json.optBoolean("blockOnLockScreen", false),
             )
         }
     }

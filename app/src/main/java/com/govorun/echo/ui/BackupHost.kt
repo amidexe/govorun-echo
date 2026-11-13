@@ -7,6 +7,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
+import com.govorun.echo.NetworkGate
 import com.govorun.echo.R
 import com.govorun.echo.backup.BackupFolder
 
@@ -38,9 +39,13 @@ internal class BackupHost(
 
     fun restore() {
         Thread {
-            val count = BackupFolder.restore(activity)
+            val message = try {
+                activity.getString(R.string.backup_restored, BackupFolder.restore(activity))
+            } catch (refused: NetworkGate.Refused) {
+                activity.getString(smartStateText(refused.reason).line)
+            }
             activity.runOnUiThread {
-                Toast.makeText(activity, activity.getString(R.string.backup_restored, count), Toast.LENGTH_SHORT).show()
+                Toast.makeText(activity, message, Toast.LENGTH_SHORT).show()
                 changed++
             }
             BackupFolder.syncAsync(activity) { activity.runOnUiThread { changed++ } }

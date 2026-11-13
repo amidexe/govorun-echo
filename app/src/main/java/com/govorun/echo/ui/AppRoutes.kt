@@ -28,7 +28,8 @@ internal fun SettingsRoute(
     val context = LocalContext.current
     var usage by remember { mutableStateOf(0L) }
     var backup by remember { mutableStateOf<com.govorun.echo.backup.BackupFolder.Status?>(null) }
-    LaunchedEffect(backupRevision, noteCount) {
+    val networkRevision by com.govorun.echo.NetworkPolicy.changes.collectAsState()
+    LaunchedEffect(backupRevision, noteCount, networkRevision) {
         backup =
             withContext(Dispatchers.IO) { com.govorun.echo.backup.BackupFolder.status(context) }
     }
@@ -47,11 +48,7 @@ internal fun SettingsRoute(
             noteCount = noteCount,
             usageBytes = usage,
             backup = backup,
-            versionName =
-                context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty(),
-            advanced =
-                advancedMode ||
-                    com.govorun.echo.commands.CommandStore(context).commands().isNotEmpty(),
+            advanced = advancedMode,
         ),
         actions,
     )
@@ -94,6 +91,7 @@ internal fun OnboardingRoute(
 internal fun SecondaryScreens(
     screen: Screen,
     install: InstallInfo,
+    experimentsUnlocked: Boolean,
     licenseName: String,
     editingCommand: Command?,
     commandsVersion: Int,
@@ -106,13 +104,18 @@ internal fun SecondaryScreens(
 ) {
     val context = LocalContext.current
     when (screen) {
+        Screen.CommandHistory -> CommandHistoryScreen({ onNavigate(Screen.Commands) }, (context as? MainActivity)?.commandHistoryId)
         Screen.Journal -> JournalScreen(onBack = { onNavigate(Screen.Settings) })
+        Screen.Experiments -> ExperimentalSettingsScreen(
+            onBack = { onNavigate(Screen.Settings) },
+            onPickFolder = settings.onPickBackup,
+        )
         Screen.About ->
             AboutScreen(
-                context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty(),
                 install,
+                experimentsUnlocked,
                 { onNavigate(Screen.Settings) },
-                settings.onVersionTap,
+                settings.onUnlockExperiments,
                 { onNavigate(Screen.Licenses) },
             ) {
                 runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(it))) }

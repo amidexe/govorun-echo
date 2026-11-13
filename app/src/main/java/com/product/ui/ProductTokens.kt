@@ -32,6 +32,7 @@ object ProductTokens {
         val Xl = 10.dp
         val Xxl = 12.dp
         val Section = 14.dp
+        val RowContent = 16.dp
         val Screen = 18.dp
     }
 
@@ -42,17 +43,22 @@ object ProductTokens {
         val Lg = 16.dp
         val Card = Lg
         val Xl = 24.dp
+        val RowGroup = 22.dp
+        val GroupedRow = 4.dp
+        val Sheet = 28.dp
     }
 
     object Size {
         val TouchTarget = 48.dp
         val Row = 48.dp
         val TopBarNavigationIcon = 20.dp
+        val TopBarNavigationSurface = 38.dp
         val TopBarActionIcon = 18.dp
+        val GroupedRowIcon = 22.dp
+        val SettingsRow = 62.dp
+        val SheetAction = 52.dp
         val SlotIcon = 14.dp
         val ActiveIcon = 18.dp
-        val CompactSwitchWidth = 34.dp
-        val CompactSwitchHeight = 20.dp
     }
 
     object Alpha {

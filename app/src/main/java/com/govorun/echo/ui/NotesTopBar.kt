@@ -51,6 +51,7 @@ import com.adamglin.phosphoricons.regular.Tag
 import com.adamglin.phosphoricons.regular.Star
 import com.govorun.echo.R
 import com.product.ui.ProductTokens
+import com.product.ui.ProductNavigationButton
 
 /** The header, tag row and selection mode share one page colour. Only the search pill is a raised-looking surface. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -77,14 +78,24 @@ internal fun NotesTopBar(
         TopAppBar(
             colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             navigationIcon = {
-                IconButton(onClick = if (selecting) actions.onClearSelection else if (archiveScope || favoriteScope) ({ actions.onTab(NotesTab.All) }) else onMenu) {
-                    Box(Modifier.size(ProductTokens.Size.TopBarNavigationIcon)) {
-                    Icon(
-                        if (selecting || archiveScope || favoriteScope) PhosphorIcons.Regular.ArrowLeft else PhosphorIcons.Regular.List,
-                        stringResource(if (selecting) R.string.action_close_selection else if (archiveScope || favoriteScope) R.string.action_back else if (computerOpen) R.string.computer_menu_active else R.string.action_menu),
-                        Modifier.size(ProductTokens.Size.TopBarNavigationIcon),
+                if (selecting || archiveScope || favoriteScope) {
+                    ProductNavigationButton(
+                        PhosphorIcons.Regular.ArrowLeft,
+                        stringResource(if (selecting) R.string.action_close_selection else R.string.action_back),
+                        if (selecting) actions.onClearSelection else ({ actions.onTab(NotesTab.All) }),
                     )
-                    if (computerOpen && !selecting && !archiveScope && !favoriteScope) Canvas(Modifier.size(6.dp).align(Alignment.TopEnd)) { drawCircle(ProductTokens.Color.Success) }
+                } else {
+                    IconButton(onClick = onMenu) {
+                        Box(Modifier.size(ProductTokens.Size.TopBarNavigationIcon)) {
+                            Icon(
+                                PhosphorIcons.Regular.List,
+                                stringResource(if (computerOpen) R.string.computer_menu_active else R.string.action_menu),
+                                Modifier.size(ProductTokens.Size.TopBarNavigationIcon),
+                            )
+                            if (computerOpen) Canvas(Modifier.size(6.dp).align(Alignment.TopEnd)) {
+                                drawCircle(ProductTokens.Color.Success)
+                            }
+                        }
                     }
                 }
             },

@@ -4,6 +4,7 @@ import android.content.Context
 import com.govorun.echo.AppSettings
 import com.govorun.echo.Journal
 import com.govorun.echo.R
+import com.govorun.echo.CapturePurpose
 import org.json.JSONObject
 import java.io.File
 
@@ -24,6 +25,7 @@ object EmptyNotes {
         dir: File,
         meta: JSONObject,
     ): Boolean {
+        if (CapturePurpose.read(meta) == CapturePurpose.COMMAND) return false
         val mode = meta.optString("mode")
         if (mode == NoteText.MODE || mode == NoteImport.MODE || mode == "merged") return false
         // Govorun's answer «no speech» is the empty one; any other failure (Govorun away, an error) may still hide words.

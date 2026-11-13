@@ -7,19 +7,23 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
-import com.govorun.echo.AppSettings
+import com.govorun.echo.CapturePurpose
 import com.govorun.echo.R
 import com.govorun.echo.AppEntry
 
-/** The notification of the recording service: a timer, «Стоп», the pause and «Отмена» while recording, a plain line while text is prepared. */
+/** Recording controls and timer, or a plain line while text is prepared. */
 internal object RecordingNotification {
+    private const val NOTIFICATION_ID = 1
+    private const val OLD_CHANNEL_ID = "recording"
+    private const val CHANNEL_ID = "recording_active"
+
     fun ensureChannel(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
         // Silent (low importance) notifications are hidden on the lock screen by default,
         // so the recording notification is default importance with sound and vibration off.
-        manager.deleteNotificationChannel(RecordingService.OLD_CHANNEL_ID)
+        manager.deleteNotificationChannel(OLD_CHANNEL_ID)
         manager.createNotificationChannel(
-            NotificationChannel(RecordingService.CHANNEL_ID, context.getString(R.string.recording_channel), NotificationManager.IMPORTANCE_DEFAULT).apply {
+            NotificationChannel(CHANNEL_ID, context.getString(R.string.recording_channel), NotificationManager.IMPORTANCE_DEFAULT).apply {
                 setSound(null, null)
                 enableVibration(false)
                 setShowBadge(false)
@@ -34,23 +38,20 @@ internal object RecordingNotification {
         startedAtWall: Long,
         silenceWarning: Boolean = false,
     ): Notification {
-        val stop =
-            PendingIntent.getService(
-                context,
-                0,
-                Intent(context, RecordingService::class.java).setAction(RecordingService.ACTION_STOP),
-                PendingIntent.FLAG_IMMUTABLE,
-            )
+        val activeNote = if (recording) (RecordingBus.state.value as? RecordingState.Recording)
+            ?.takeUnless { it.purpose == CapturePurpose.COMMAND } else null
+        val openIntent = activeNote?.let { AppEntry.note(context, it.noteId).setIdentifier(it.noteId) }
+            ?: AppEntry.intent(context)
         val open =
             PendingIntent.getActivity(
                 context,
                 1,
-                AppEntry.intent(context),
+                openIntent,
                 PendingIntent.FLAG_IMMUTABLE,
             )
         val builder =
             Notification
-                .Builder(context, RecordingService.CHANNEL_ID)
+                .Builder(context, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_stat_recording)
                 .setContentTitle(title)
                 .setContentIntent(open)
@@ -63,12 +64,13 @@ internal object RecordingNotification {
             val pausedAt = RecordingBus.pausedAt.value
             fun action(
                 label: Int,
-                intent: PendingIntent,
-            ) = Notification.Action.Builder(null, context.getString(label), intent).setAuthenticationRequired(false).build()
-            fun service(
-                action: String,
-                code: Int,
-            ) = PendingIntent.getService(context, code, Intent(context, RecordingService::class.java).setAction(action), PendingIntent.FLAG_IMMUTABLE)
+                intent: Intent,
+            ): Notification.Action {
+                val pending = PendingIntent.getService(context, 0,
+                    intent.setIdentifier(startedAtWall.toString()), PendingIntent.FLAG_IMMUTABLE)
+                return Notification.Action.Builder(null, context.getString(label), pending)
+                    .setAuthenticationRequired(false).build()
+            }
             if (pausedAt == null) {
                 // The clock counts only what was recorded: the pauses so far move its start.
                 builder.setWhen(startedAtWall + RecordingBus.pausedMs.value).setShowWhen(true).setUsesChronometer(true)
@@ -78,18 +80,23 @@ internal object RecordingNotification {
                     .setContentText(context.getString(R.string.recording_paused_text, clock(RecordingBus.recordedMs(startedAtWall))))
                     .setShowWhen(false)
             }
-            // «Стоп» always first, so the button under the finger never turns into it; «Отмена» last, away from it.
-            builder.addAction(action(R.string.recording_stop, stop))
+            // Keep the stop and cancel positions fixed when the middle action changes.
+            builder.addAction(action(R.string.recording_stop, RecordingService.stopIntent(context)))
             when {
-                pausedAt != null -> builder.addAction(action(R.string.recording_keep, service(RecordingService.ACTION_CONTINUE_RECORDING, 3)))
-                silenceWarning -> {
-                    // In the title: a folded notification shows only that line, and the tap sent the person to look.
+                pausedAt != null && activeNote != null ->
+                    builder.addAction(action(R.string.recording_keep, RecordingService.pauseIntent(context, false)))
+                silenceWarning && pausedAt == null -> {
                     builder.setContentTitle(context.getString(R.string.recording_silence_warning))
-                    builder.addAction(action(R.string.recording_keep, service(RecordingService.ACTION_KEEP, 2)))
+                    val keep = Intent(context, RecordingService::class.java).setAction(RecordingService.ACTION_KEEP)
+                    builder.addAction(action(R.string.recording_keep, keep))
                 }
-                else -> builder.addAction(action(R.string.recording_pause, service(RecordingService.ACTION_PAUSE_RECORDING, 4)))
+                activeNote != null ->
+                    builder.addAction(action(R.string.recording_pause, RecordingService.pauseIntent(context, true)))
             }
-            builder.addAction(action(R.string.recording_cancel, service(RecordingService.ACTION_CANCEL_RECORDING, 5)))
+            if (activeNote != null) {
+                val cancel = Intent(context, RecordingService::class.java).setAction(RecordingService.ACTION_CANCEL_RECORDING)
+                builder.addAction(action(R.string.recording_cancel, cancel))
+            }
             requestPromotedOngoing(builder)
         }
         return builder.build()
@@ -111,6 +118,16 @@ internal object RecordingNotification {
         }
     }
 
+    fun refresh(context: Context, notification: Notification) {
+        context.getSystemService(NotificationManager::class.java)?.notify(NOTIFICATION_ID, notification)
+    }
+
+    fun refreshWhenActive(context: Context, active: RecordingState.Recording, notification: () -> Notification) {
+        context.mainExecutor.execute {
+            if (RecordingBus.state.value == active) refresh(context, notification())
+        }
+    }
+
     /** Puts the recording [service] in the foreground with [notification]; false when the system does not allow it now. */
     fun enterForeground(
         service: android.app.Service,
@@ -118,7 +135,7 @@ internal object RecordingNotification {
     ): Boolean =
         try {
             ensureChannel(service)
-            service.startForeground(RecordingService.NOTIFICATION_ID, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+            service.startForeground(NOTIFICATION_ID, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
             true
         } catch (error: Exception) {
             android.util.Log.w("Echo", "event=foreground_start_denied", error)

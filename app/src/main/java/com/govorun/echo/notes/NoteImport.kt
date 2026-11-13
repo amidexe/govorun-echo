@@ -24,11 +24,12 @@ internal object NoteImport {
     fun prepare(
         context: Context,
         uri: Uri,
+        speechFilter: Boolean = false,
     ): String? {
         val (id, dir) = NoteStore.newNote(context)
         preparing.add(id)
         try {
-            return prepareNote(context, uri, id, dir)
+            return prepareNote(context, uri, id, dir, speechFilter)
         } catch (error: Exception) {
             android.util.Log.w("Echo", "event=import_failed note=$id", error)
             if (dir.isDirectory) NoteStore.updateMeta(dir) {
@@ -47,6 +48,7 @@ internal object NoteImport {
         uri: Uri,
         id: String,
         dir: File,
+        speechFilter: Boolean,
     ): String? {
         NoteStore.writeMeta(
             dir,
@@ -54,7 +56,8 @@ internal object NoteImport {
                 .put("mode", MODE).put("unseen", true)
                 .put("startedAtMs", System.currentTimeMillis())
                 .put("state", NoteStore.STATE_RECOGNIZING)
-                .put("error", PREPARING),
+                .put("error", PREPARING)
+                .apply { if (speechFilter) put("fileSpeechFilter", true) },
         )
         pendingReveal.value = id
         // The only real limit on what can be imported: room for its decoded sound (16 kHz, about 115 MB an hour) while it is

@@ -19,9 +19,15 @@ internal fun TailText(
     val measurer = androidx.compose.ui.text.rememberTextMeasurer()
     androidx.compose.foundation.layout.BoxWithConstraints {
         val shown =
-            remember(text, constraints.maxWidth) {
-                val layout = measurer.measure(text, style, constraints = androidx.compose.ui.unit.Constraints(maxWidth = constraints.maxWidth))
-                if (layout.lineCount <= lines) text else "…" + text.substring(layout.getLineStart(layout.lineCount - lines)).trimStart()
+            remember(text, style, lines, constraints.maxWidth, measurer) {
+                val width = androidx.compose.ui.unit.Constraints(maxWidth = constraints.maxWidth)
+                val layout = measurer.measure(text, style, constraints = width)
+                if (layout.lineCount <= lines) text else {
+                    val tail = text.substring(layout.getLineStart(layout.lineCount - lines)).trimStart()
+                    val marked = "…$tail"
+                    // A leading ellipsis can wrap a full line and push the newest word out.
+                    if (measurer.measure(marked, style, constraints = width).lineCount <= lines) marked else tail
+                }
             }
         Text(shown, style = style, maxLines = lines, overflow = TextOverflow.Ellipsis)
     }

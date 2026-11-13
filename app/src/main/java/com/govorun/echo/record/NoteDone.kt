@@ -12,9 +12,10 @@ internal fun afterNoteDone(
     noteId: String,
 ) {
     if (!EmptyNotes.dropIfEmpty(context, noteId)) {
-        BackupFolder.syncAsync(context)
-        Dispatcher.onNoteDoneAsync(context, noteId)
-        com.govorun.echo.smart.itogiByItself(context, noteId)
+        Dispatcher.onNoteDoneAsync(context, noteId) {
+            BackupFolder.syncAsync(context)
+            com.govorun.echo.smart.itogiByItself(context, noteId)
+        }
     }
     Snapshot.write(context)
 }

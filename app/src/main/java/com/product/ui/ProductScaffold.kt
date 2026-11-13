@@ -1,8 +1,12 @@
 package com.product.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -12,6 +16,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -33,22 +38,17 @@ fun ProductScaffold(
     onBack: (() -> Unit)? = null,
     navigationAction: ProductTopAction? = null,
     actions: List<ProductTopAction> = emptyList(),
+    containerColor: Color = MaterialTheme.colorScheme.surfaceContainerLow,
     content: @Composable (PaddingValues) -> Unit,
 ) {
     Scaffold(
         modifier = modifier.fillMaxSize(),
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = containerColor,
         topBar = {
             TopAppBar(
                 navigationIcon = {
                     if (onBack != null) {
-                        IconButton(onClick = onBack) {
-                            Icon(
-                                PhosphorIcons.Regular.ArrowLeft,
-                                contentDescription = "Назад",
-                                modifier = Modifier.size(ProductTokens.Size.TopBarNavigationIcon),
-                            )
-                        }
+                        ProductNavigationButton(PhosphorIcons.Regular.ArrowLeft, "Назад", onBack)
                     } else if (navigationAction != null) {
                         IconButton(onClick = navigationAction.onClick) {
                             Icon(
@@ -76,6 +76,30 @@ fun ProductScaffold(
         },
         content = content,
     )
+}
+
+@Composable
+internal fun ProductNavigationButton(
+    icon: ImageVector,
+    description: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+) {
+    IconButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier.padding(start = ProductTokens.Spacing.Lg, end = ProductTokens.Spacing.Sm)
+            .size(ProductTokens.Size.TouchTarget),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(ProductTokens.Size.TopBarNavigationSurface)
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, description, Modifier.size(ProductTokens.Size.TopBarNavigationIcon))
+        }
+    }
 }
 
 fun productScreenPadding(

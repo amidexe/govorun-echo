@@ -1,5 +1,6 @@
 package com.govorun.echo.record
 
+import android.content.ContentResolver
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -8,29 +9,26 @@ import com.govorun.echo.R
 
 /**
  * Audio or video files into Echo, from «Поделиться» or the menu's «Добавить файлы»: each goes to the service, which decodes it and
- * queues it (a long file behind recordings and short ones). No question and no message: its card appears in the list at once.
+ * queues it (a long file behind recordings and short ones). The mode choice is shared with external file imports.
  */
 internal object FileImport {
-    /** From «Добавить файлы»: the picked files stay readable for the minutes their decoding may take. */
-    fun picked(
-        context: Context,
-        uris: List<Uri>,
-    ): Boolean {
-        uris.forEach { runCatching { context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION) } }
-        return start(context, uris)
-    }
-
+    const val EXTRA_SPEECH_FILTER = "com.govorun.echo.FILE_SPEECH_FILTER"
     fun start(
         context: Context,
         uris: List<Uri>,
+        speechFilter: Boolean = false,
     ): Boolean {
+        // Android's media decoders can fetch a URL when passed one as a data source.
+        // This entry point accepts files only, including documents supplied by Android providers.
+        val files = uris.filter { it.scheme == ContentResolver.SCHEME_CONTENT || it.scheme == ContentResolver.SCHEME_FILE }
         val sent =
-            uris.count { uri ->
+            files.count { uri ->
                 runCatching {
                     context.startForegroundService(
                         Intent(context, RecordingService::class.java)
                             .setAction(RecordingService.ACTION_IMPORT)
                             .setData(uri)
+                            .putExtra(EXTRA_SPEECH_FILTER, speechFilter)
                             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),
                     )
                 }.onFailure { android.util.Log.w("Echo", "event=import_start_failed", it) }.isSuccess

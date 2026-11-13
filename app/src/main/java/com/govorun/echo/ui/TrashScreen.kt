@@ -66,7 +66,11 @@ internal fun TrashScreen(
         topBar = {
             TopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                navigationIcon = { IconButton(onClick = onBack) { Icon(PhosphorIcons.Regular.ArrowLeft, contentDescription = stringResource(R.string.action_back), modifier = Modifier.size(ProductTokens.Size.TopBarNavigationIcon)) } },
+                navigationIcon = {
+                    com.product.ui.ProductNavigationButton(
+                        PhosphorIcons.Regular.ArrowLeft, stringResource(R.string.action_back), onBack,
+                    )
+                },
                 title = { Text(stringResource(R.string.screen_trash)) },
                 actions = { if (items.isNotEmpty()) TextButton(onClick = { clearing = true }) { Text(stringResource(R.string.trash_clear)) } },
             )

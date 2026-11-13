@@ -21,7 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.foundation.layout.PaddingValues
@@ -36,11 +36,13 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberTopAppBarState
+import androidx.compose.material3.TopAppBarState
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -50,6 +52,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -91,6 +94,9 @@ import java.time.LocalDate
 @Composable
 internal fun NotesScreen(
     notes: List<NoteStore.Entry>,
+    notesLoaded: Boolean,
+    list: LazyListState,
+    headerState: TopAppBarState,
     tab: NotesTab,
     filter: NotesFilter,
     recordingState: RecordingState,
@@ -159,7 +165,6 @@ internal fun NotesScreen(
         }
     // The archive's row keeps only the pinned tags its notes carry.
     val rowTags = actions.pinnedTags.filter { !archiveScope || (counts[it] ?: 0) > 0 }.map { it to (counts[it] ?: 0) }
-    val list = rememberLazyListState()
     val revealImport by com.govorun.echo.notes.NoteImport.pendingReveal.collectAsState()
     LaunchedEffect(revealImport, visible) {
         val id = revealImport ?: return@LaunchedEffect
@@ -168,17 +173,30 @@ internal fun NotesScreen(
             com.govorun.echo.notes.NoteImport.revealed(id)
         }
     }
-    val header = TopAppBarDefaults.enterAlwaysScrollBehavior(
-        state = rememberTopAppBarState(), canScroll = { !searching && !selecting && !drawer.isOpen },
-    )
-    LaunchedEffect(searching, selecting, drawer.isOpen) {
-        if (searching || selecting || drawer.isOpen) header.state.heightOffset = 0f
+    var screenHeight by remember { mutableIntStateOf(0) }
+    val fitsWithHeader by remember(list, headerState) {
+        derivedStateOf {
+            val layout = list.layoutInfo
+            val items = layout.visibleItemsInfo
+            val expandedViewport = screenHeight + headerState.heightOffsetLimit
+            if (expandedViewport <= 0 || items.isEmpty() || items.size != layout.totalItemsCount) {
+                false
+            } else {
+                val contentHeight = items.last().offset + items.last().size - items.first().offset
+                contentHeight + layout.beforeContentPadding + layout.afterContentPadding <= expandedViewport
+            }
+        }
+    }
+    val keepHeaderOpen = searching || selecting || drawer.isOpen || fitsWithHeader
+    val header = TopAppBarDefaults.enterAlwaysScrollBehavior(state = headerState, canScroll = { notesLoaded && !keepHeaderOpen })
+    LaunchedEffect(keepHeaderOpen) {
+        if (keepHeaderOpen) headerState.heightOffset = 0f
     }
     val playingButtonShown by rememberRowButtonInView(list, playing.noteId)
     val recordingRowShown by rememberRowButtonInView(list, recordingId)
 
         Scaffold(
-            modifier = Modifier.nestedScroll(header.nestedScrollConnection).statusBarVeil(),
+            modifier = Modifier.onSizeChanged { screenHeight = it.height }.nestedScroll(header.nestedScrollConnection).statusBarVeil(),
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
             containerColor = MaterialTheme.colorScheme.background,
             topBar = {
@@ -192,7 +210,7 @@ internal fun NotesScreen(
         ) { padding ->
             Box(Modifier.fillMaxSize().padding(padding)) {
                 Column(Modifier.fillMaxSize()) {
-                LazyColumn(
+                if (notesLoaded) LazyColumn(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                     state = list,
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = DOCK_CLEARANCE),

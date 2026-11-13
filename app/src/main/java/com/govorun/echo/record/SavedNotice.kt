@@ -1,5 +1,6 @@
 package com.govorun.echo.record
 
+import com.govorun.echo.CapturePurpose
 import android.app.ActivityManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -23,7 +24,7 @@ import java.io.File
 internal object SavedNotice {
     private const val CHANNEL = "note_ready"
     private const val ID = 7_003
-    private const val EXTRA_NOTE = "com.govorun.echo.extra.OPEN_NOTE"
+    private const val EXTRA_NOTE = AppEntry.NOTE_EXTRA
     private const val NAME_CHARS = 60
 
     fun show(
@@ -33,10 +34,14 @@ internal object SavedNotice {
         if (!AppSettings.savedNotice(context) || onScreen()) return
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
         val dir = File(NoteStore.root(context), noteId)
+        val meta = runCatching { JSONObject(File(dir, "meta.json").readText()) }.getOrNull() ?: return
+        val purpose = CapturePurpose.read(meta)
+        if (purpose == CapturePurpose.COMMAND) return
         val text = runCatching { File(dir, "text.txt").readText().trim() }.getOrDefault("")
-        if (text.isEmpty()) return
+        if (text.isEmpty() || purpose == CapturePurpose.QUICK &&
+            com.govorun.echo.commands.Matcher.find(text, com.govorun.echo.commands.CommandStore(context).commands()) != null) return
         val locked = AppSettings.appLock(context) && context.getSystemService(android.app.KeyguardManager::class.java)?.isDeviceSecure == true
-        val title = runCatching { JSONObject(File(dir, "meta.json").readText()).optString("title") }.getOrDefault("")
+        val title = meta.optString("title")
         val name = title.ifBlank { text.lineSequence().first().take(NAME_CHARS) }
         manager.createNotificationChannel(
             NotificationChannel(CHANNEL, context.getString(R.string.saved_notice_channel), NotificationManager.IMPORTANCE_LOW).apply {
@@ -98,7 +103,7 @@ internal object SavedNotice {
         context: Context,
         noteId: String,
         byUser: Boolean = true,
-    ): Intent = AppEntry.intent(context).putExtra("echo_auto_open", !byUser).putExtra(EXTRA_NOTE, noteId).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+    ): Intent = AppEntry.note(context, noteId, byUser)
 
     /** The note a tap on the notice, or a shared text, asks to open, if this start came from one. */
     data class Open(val id: String, val byUser: Boolean)

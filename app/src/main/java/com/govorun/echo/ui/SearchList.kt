@@ -105,7 +105,7 @@ internal fun SearchOrderSetting() {
                 else -> R.string.search_order_ranked
             },
         )
-    SettingsLinkRow(PhosphorIcons.Regular.SortDescending, stringResource(R.string.search_order_title), stringResource(R.string.search_order_summary), value = label(value), onClick = { open = true })
+    SettingsLinkRow(PhosphorIcons.Regular.SortDescending, stringResource(R.string.search_order_title), value = label(value), onClick = { open = true })
     if (open) {
         ProductChoiceSheet(
             title = stringResource(R.string.search_order_title),
@@ -134,9 +134,9 @@ internal fun SearchTopBar(
     androidx.compose.material3.TopAppBar(
         colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
         navigationIcon = {
-            IconButton(onClick = actions.onToggleSearch) {
-                Icon(PhosphorIcons.Regular.ArrowLeft, contentDescription = stringResource(R.string.action_close_search), modifier = Modifier.size(ProductTokens.Size.TopBarNavigationIcon))
-            }
+            com.product.ui.ProductNavigationButton(
+                PhosphorIcons.Regular.ArrowLeft, stringResource(R.string.action_close_search), actions.onToggleSearch,
+            )
         },
         title = {
             androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = RoundedCornerShape(50), modifier = Modifier.fillMaxWidth().height(48.dp)) {

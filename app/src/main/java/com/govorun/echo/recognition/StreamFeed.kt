@@ -27,6 +27,8 @@ interface RecognitionFeed {
 
     /** Where in the sound to start: a note paused part-way goes on from there. */
     val fromMs: Long get() = 0L
+    /** Explicit per-import choice; ordinary recordings always retain full file coverage. */
+    val fileSpeechFilter: Boolean get() = false
 }
 
 /** Neither a second of sound taken nor a phrase back for this long: Govorun is stuck, and the note says so. */

@@ -34,7 +34,6 @@ internal fun SilenceStopSetting() {
     SettingsLinkRow(
         PhosphorIcons.Regular.Timer,
         stringResource(R.string.settings_silence_title),
-        stringResource(R.string.settings_silence_text),
         value = label(value),
         onClick = { open = true },
     )
@@ -55,7 +54,7 @@ internal fun SilenceStopSetting() {
 internal fun RecordingTapsSetting() {
     val context = LocalContext.current
     var on by remember { mutableStateOf(AppSettings.recordingTaps(context)) }
-    SwitchRow(PhosphorIcons.Regular.Vibrate, R.string.settings_taps_title, R.string.settings_taps_text, on) { on = it; AppSettings.setRecordingTaps(context, it) }
+    SwitchRow(PhosphorIcons.Regular.Vibrate, R.string.settings_taps_title, null, on) { on = it; AppSettings.setRecordingTaps(context, it) }
 }
 
 /** «Заметка готова» in the shade, off unless asked for: the last note to open with a tap, so a quick one is not forgotten. */
@@ -63,7 +62,7 @@ internal fun RecordingTapsSetting() {
 internal fun SavedNoticeSetting() {
     val context = LocalContext.current
     var on by remember { mutableStateOf(AppSettings.savedNotice(context)) }
-    SwitchRow(PhosphorIcons.Regular.Bell, R.string.saved_notice_setting, R.string.saved_notice_setting_text, on) { on = it; AppSettings.setSavedNotice(context, it) }
+    SwitchRow(PhosphorIcons.Regular.Bell, R.string.saved_notice_setting, null, on) { on = it; AppSettings.setSavedNotice(context, it) }
 }
 
 /** «Убирать пустые записи»: turning it on clears the empty ones already there and says how many went to the trash. */

@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
 
 /**
@@ -18,6 +19,7 @@ class TasksChanged : BroadcastReceiver() {
         intent: Intent,
     ) {
         if (!Smart.available || intent.action != ACTION) return
+        intent.getStringExtra("taskId")?.let { results.tryEmit(it) }
         val app = context.applicationContext
         val pending = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
@@ -31,5 +33,6 @@ class TasksChanged : BroadcastReceiver() {
 
     companion object {
         const val ACTION = "com.govorun.api.smart.v1.TASKS_CHANGED"
+        internal val results = MutableSharedFlow<String>(extraBufferCapacity = 8)
     }
 }

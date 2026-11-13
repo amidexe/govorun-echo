@@ -15,6 +15,7 @@ internal fun errorLabel(error: String): Int =
         "unreachable" -> R.string.error_unreachable
         "import_failed" -> R.string.error_import_failed
         "failed_5" -> R.string.error_failed_5
+        "failed_-5" -> R.string.error_file_filter_unsupported
         else -> R.string.error_unknown
     }
 

@@ -27,7 +27,7 @@ internal class TransferViewModel(application:Application):AndroidViewModel(appli
     }
     fun open(uri:Uri)=work {
         val value=UserTransfer.prepare(app,uri)
-        mutable.update{it.copy(pending=value,settings=value.plan.units.none{unit->unit.isNote && unit.fingerprint!="missing"})}
+        mutable.update{it.copy(pending=value,settings=value.plan.units.none{unit->unit.record && unit.fingerprint!="missing"})}
         if(closed)discard()
     }
     fun restore() {

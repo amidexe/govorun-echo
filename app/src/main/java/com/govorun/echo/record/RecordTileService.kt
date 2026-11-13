@@ -13,14 +13,11 @@ import com.govorun.echo.formatDuration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Quick Settings tile: tap to start a long recording, tap again to stop. The tile is reachable
@@ -28,8 +25,6 @@ import kotlinx.coroutines.withTimeoutOrNull
  */
 class RecordTileService : TileService() {
     private var scope: CoroutineScope? = null
-    private val entry = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private var pendingStart: Job? = null
 
     override fun onStartListening() {
         scope?.cancel()
@@ -57,40 +52,48 @@ class RecordTileService : TileService() {
         Log.i(TAG, "event=tile_click phase=${recordTilePhase(state, RecordingBus.stopping.value)}")
         if (RecordingBus.stopping.value) return
         if (state is RecordingState.Recording || state is RecordingState.Starting) {
-            pendingStart?.cancel()
             RecordingBus.stopping.value = true
             runCatching { startService(RecordingService.stopIntent(this)) }.onFailure { RecordingBus.stopping.value = false; Log.w(TAG, "event=tile_stop_rejected", it) }
+            present(existingOnly = true)
             return
         }
-        RecordingBus.state.value = RecordingState.Starting
-        val request = runCatching { startForegroundService(RecordingService.startIntent(this, RecordingService.MODE_LONG)) }
-        if (request.isFailure) {
-            val error = request.exceptionOrNull()!!
-            Log.w(TAG, "event=tile_direct_rejected", error)
-            val visible = error is android.app.ForegroundServiceStartNotAllowedException || error is SecurityException
-            RecordingBus.state.value = RecordingState.Failed("tile_direct_start_failed", visible)
-        }
-        pendingStart = entry.launch {
-            val result = withTimeoutOrNull(15_000) { RecordingBus.state.first { it !is RecordingState.Starting } }
-            when {
-                result is RecordingState.Failed && result.needsVisibleStart -> openRecordingCard()
-                result is RecordingState.Failed -> showStartError()
-                result == null && RecordingBus.state.value is RecordingState.Starting -> {
-                    RecordingBus.failed("tile_start_timeout"); showStartError()
-                }
-            }
-        }
+        present(existingOnly = false)
     }
 
-    private fun openRecordingCard() {
-        Log.i(TAG, "event=tile_visible_fallback")
-        runCatching { openActivity(AppEntry.recording(this).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)) }
+    private fun present(existingOnly: Boolean) {
+        if (!existingOnly && checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            val allow = Runnable { runCatching { openActivity(AppEntry.intent(this)) }.onFailure { showStartError() } }
+            if (isLocked) unlockAndRun(allow) else allow.run()
+            return
+        }
+        if (!isLocked) {
+            val inApp = runCatching { TilePresentation.inApp?.invoke(existingOnly, ::openActivity) }
+                .onFailure { Log.w(TAG, "event=tile_app_rejected type=${it.javaClass.simpleName}") }
+            if (inApp.getOrNull() == true) {
+                Log.i(TAG, "event=tile_app_open")
+                return
+            }
+            if (TilePresentation.show?.invoke(this, existingOnly) == true) {
+                Log.i(TAG, "event=tile_dialog_open")
+                return
+            }
+        }
+        // Android puts QS dialogs behind keyguard. The recording card can appear above it.
+        openRecordingCard(existingOnly)
+    }
+
+    private fun openRecordingCard(existingOnly: Boolean) {
+        Log.i(TAG, "event=tile_card_open")
+        val card = AppEntry.recording(this, existingOnly)
+            .putExtra(AppEntry.TILE_RECORDING_EXTRA, true)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        runCatching { openActivity(card) }
             .onFailure { Log.w(TAG, "event=tile_card_rejected", it); showStartError() }
     }
 
     private fun showStartError() = android.widget.Toast.makeText(this, R.string.tile_start_failed, android.widget.Toast.LENGTH_LONG).show()
 
-    override fun onDestroy() { entry.cancel(); scope?.cancel(); super.onDestroy() }
+    override fun onDestroy() { scope?.cancel(); super.onDestroy() }
 
     private fun openActivity(open: Intent) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
