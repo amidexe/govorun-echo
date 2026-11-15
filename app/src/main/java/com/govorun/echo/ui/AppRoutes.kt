@@ -9,6 +9,7 @@ import com.govorun.echo.AppSettings
 import com.govorun.echo.backup.BackupFolder
 import com.govorun.echo.commands.Command
 import com.govorun.echo.commands.CommandStore
+import com.govorun.echo.commands.CommandTemplate
 import com.govorun.echo.notes.NoteStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -62,6 +63,7 @@ internal fun OnboardingRoute(
     settings: SettingsActions,
     onStep: (OnboardingStep) -> Unit,
     onFinish: () -> Unit,
+    onClose: (() -> Unit)?,
     onSelfTest: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -82,64 +84,85 @@ internal fun OnboardingRoute(
             onAddTile = settings.onAddTile,
             onOpenAccessibility = settings.onOpenAccessibility,
         )
-    BackHandler(enabled = state.step != OnboardingStep.Welcome) { actions.onBack() }
+    BackHandler(enabled = state.step != OnboardingStep.Welcome || onClose != null) {
+        if (state.step == OnboardingStep.Welcome) onClose?.invoke() else actions.onBack()
+    }
     OnboardingScreen(state, actions)
 }
 
 /** Secondary routes share navigation callbacks and hold no app-wide state. */
 @Composable
 internal fun SecondaryScreens(
-    screen: Screen,
+    page: AppPage,
     install: InstallInfo,
     experimentsUnlocked: Boolean,
-    licenseName: String,
-    editingCommand: Command?,
     commandsVersion: Int,
     settings: SettingsActions,
     onNavigate: (Screen) -> Unit,
+    onBack: () -> Unit,
+    onLicenses: () -> Unit,
     onLicense: (String) -> Unit,
     onCommand: (Command?) -> Unit,
+    onTemplate: (CommandTemplate) -> Unit,
     onCommandsChanged: () -> Unit,
     onNotesChanged: () -> Unit,
 ) {
     val context = LocalContext.current
-    when (screen) {
-        Screen.CommandHistory -> CommandHistoryScreen({ onNavigate(Screen.Commands) }, (context as? MainActivity)?.commandHistoryId)
-        Screen.Journal -> JournalScreen(onBack = { onNavigate(Screen.Settings) })
+    when (page.screen) {
+        Screen.CommandHistory -> CommandHistoryScreen(onBack, page.argument)
+        Screen.Journal -> JournalScreen(onBack = onBack)
         Screen.Experiments -> ExperimentalSettingsScreen(
-            onBack = { onNavigate(Screen.Settings) },
+            onBack = onBack,
             onPickFolder = settings.onPickBackup,
         )
         Screen.About ->
             AboutScreen(
                 install,
                 experimentsUnlocked,
-                { onNavigate(Screen.Settings) },
+                onBack,
                 settings.onUnlockExperiments,
-                { onNavigate(Screen.Licenses) },
+                onLicenses,
             ) {
                 runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(it))) }
             }
-        Screen.Licenses -> LicensesScreen(onBack = { onNavigate(Screen.About) }, onOpen = onLicense)
-        Screen.License -> LicenseScreen(licenseName, onBack = { onNavigate(Screen.Licenses) })
+        Screen.Licenses -> LicensesScreen(onBack = onBack, onOpen = onLicense)
+        Screen.License -> LicenseScreen(page.argument.orEmpty(), onBack = onBack)
         Screen.Trash ->
-            TrashScreen(onBack = { onNavigate(Screen.Notes) }, onChanged = onNotesChanged)
+            TrashScreen(onBack = onBack, onChanged = onNotesChanged)
         Screen.Commands ->
             CommandsScreen(
                 commands = remember(commandsVersion) { CommandStore(context).commands() },
-                onBack = { onNavigate(Screen.Settings) },
+                onBack = onBack,
+                onOpen = onCommand,
+                onTemplate = onTemplate,
+                onHistory = { onNavigate(Screen.CommandHistory) },
+                onAdvanced = { onNavigate(Screen.AdvancedCommands) },
+            )
+        Screen.AdvancedCommands ->
+            AdvancedCommandsScreen(
+                commands = remember(commandsVersion) { CommandStore(context).commands() },
+                onBack = onBack,
                 onOpen = onCommand,
                 onRecipesChanged = onCommandsChanged,
             )
-        Screen.CommandEdit ->
+        Screen.CommandCreate ->
+            CommandTemplateEditor(CommandTemplate.valueOf(checkNotNull(page.argument)), onBack) {
+                onCommandsChanged()
+                onBack()
+            }
+        Screen.CommandEdit -> {
+            val command = remember(page.argument, commandsVersion) {
+                page.argument?.let { id -> CommandStore(context).commands().firstOrNull { it.id == id } }
+            }
             CommandEditorScreen(
-                existing = editingCommand,
-                onBack = { onNavigate(Screen.Commands) },
+                existing = command,
+                onBack = onBack,
                 onSaved = {
                     onCommandsChanged()
-                    onNavigate(Screen.Commands)
+                    onBack()
                 },
             )
+        }
         Screen.Notes,
         Screen.Note,
         Screen.Settings -> error("Main screen passed as a secondary route")

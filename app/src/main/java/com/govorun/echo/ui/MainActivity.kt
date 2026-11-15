@@ -1,5 +1,6 @@
 package com.govorun.echo.ui
 
+import android.app.AlertDialog
 import android.app.KeyguardManager
 import android.content.Intent
 import android.os.Bundle
@@ -11,9 +12,11 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
 import com.govorun.echo.AppSettings
+import com.govorun.echo.AppEntry
 import com.govorun.echo.R
 import com.govorun.echo.notes.NoteStore
 import com.govorun.echo.notes.NoteTrash
@@ -30,9 +33,8 @@ class MainActivity : ComponentActivity() {
     internal val fragments by lazy(LazyThreadSafetyMode.NONE) { FragmentHost(this, player) }
     internal var themeMode by mutableIntStateOf(AppSettings.THEME_SYSTEM)
     internal var dynamicColors by mutableStateOf(false)
-    internal var commandHistoryOpenVersion by mutableIntStateOf(0)
-    internal var commandHistoryId by mutableStateOf<String?>(null)
-    internal var asked by mutableStateOf<com.govorun.echo.record.SavedNotice.Open?>(null)
+    internal var pendingOpen by mutableStateOf<Intent?>(null)
+    internal var noteConfirmation: AlertDialog? = null
     private var tileStartRequestedAt: Long? = null
     private val presentTile: (Boolean, (Intent) -> Unit) -> Boolean = ::presentTileInApp
 
@@ -53,15 +55,14 @@ class MainActivity : ComponentActivity() {
             }
                 .start()
         themeMode = AppSettings.themeMode(this)
-        commandHistoryId = intent?.getStringExtra(com.govorun.echo.AppEntry.COMMAND_EXTRA)
-        if (commandHistoryId != null) commandHistoryOpenVersion++
-        asked = com.govorun.echo.record.SavedNotice.noteOf(intent)
+        if (savedInstanceState == null) acceptOpen(intent)
         computerCode(intent)
         dynamicColors = AppSettings.dynamicColors(this)
         setContent {
             EchoTheme(themeMode, dynamicColors) {
+                val appState = rememberSaveableStateHolder()
                 AppLockGate {
-                    App()
+                    appState.SaveableStateProvider("app") { App() }
                     KeepScreenOnWhileTalking()
                     ComputerLink()
                 }
@@ -73,10 +74,14 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         if (intent.action == RETURN_FROM_TILE) return
-        commandHistoryId = intent?.getStringExtra(com.govorun.echo.AppEntry.COMMAND_EXTRA)
-        if (commandHistoryId != null) commandHistoryOpenVersion++
-        asked = com.govorun.echo.record.SavedNotice.noteOf(intent) ?: asked
+        acceptOpen(intent)
         computerCode(intent)
+    }
+
+    private fun acceptOpen(intent: Intent?) {
+        if (intent != null && (intent.hasExtra(AppEntry.NOTE_EXTRA) || intent.hasExtra(AppEntry.COMMAND_EXTRA))) {
+            pendingOpen = intent
+        }
     }
 
     // Debug builds only: the text of a computer's code from adb (--es echo_pair "…"), as the

@@ -26,6 +26,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -56,9 +57,10 @@ import kotlinx.coroutines.withContext
  */
 internal class ItogiState(
     private val scope: CoroutineScope,
+    shownState: androidx.compose.runtime.MutableState<Boolean> = mutableStateOf(false),
 ) {
     /** The «Итоги» tab is the open one. */
-    var shown by mutableStateOf(false)
+    var shown by shownState
     var making by mutableStateOf(false)
     var failed by mutableStateOf<String?>(null)
     var made by mutableStateOf<NoteItogi?>(null)
@@ -129,7 +131,8 @@ internal class ItogiState(
 @Composable
 internal fun rememberItogiState(noteId: String): ItogiState {
     val scope = rememberCoroutineScope()
-    return remember(noteId) { ItogiState(scope).also { state -> ItogiRuns.running(noteId)?.let { state.follow(it) } } }
+    val shown = rememberSaveable(noteId) { mutableStateOf(false) }
+    return remember(noteId) { ItogiState(scope, shown).also { state -> ItogiRuns.running(noteId)?.let { state.follow(it) } } }
 }
 
 /**

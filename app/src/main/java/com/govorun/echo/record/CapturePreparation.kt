@@ -70,6 +70,11 @@ internal class CaptureSpeech {
 
     fun ready() { readyAt = SystemClock.elapsedRealtime() }
 
+    fun interrupted() {
+        readyAt = 0L
+        changed(false)
+    }
+
     fun changed(speaking: Boolean) {
         if (!speaking) resume()
         active = speaking

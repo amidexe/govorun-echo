@@ -14,8 +14,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 /** A saved working text and a distinct editor preview; only Save replaces the working text. */
-internal class FairState(private val scope: CoroutineScope) {
-    var shown by mutableStateOf(false)
+internal class FairState(
+    private val scope: CoroutineScope,
+    shownState: androidx.compose.runtime.MutableState<Boolean> = mutableStateOf(false),
+) {
+    var shown by shownState
     var making by mutableStateOf(false)
     var awaiting by mutableStateOf(false)
     val busy: Boolean get() = making || awaiting

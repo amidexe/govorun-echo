@@ -14,7 +14,10 @@ import java.time.format.FormatStyle
 import com.govorun.echo.errorLabel
 import com.govorun.echo.TextOptions
 
-internal enum class Screen { Notes, Note, Settings, Commands, CommandEdit, CommandHistory, Journal, Trash, Licenses, License, About, Experiments }
+internal enum class Screen {
+    Notes, Note, Settings, Commands, AdvancedCommands, CommandEdit, CommandCreate, CommandHistory,
+    Journal, Trash, Licenses, License, About, Experiments,
+}
 
 /** What stands between the owner and a working note, in the order it should be fixed. */
 internal data class SetupState(

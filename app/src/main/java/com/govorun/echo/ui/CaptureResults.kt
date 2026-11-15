@@ -30,6 +30,9 @@ internal fun readCaptureResult(context: Context, noteId: String): CaptureResult 
     meta.optJSONObject("command")?.let { command ->
         val receipt = CommandResult.read(command, context.getString(R.string.commands_smart_expired),
             context.getString(R.string.commands_smart_unknown))
+        val yandex = receipt.kind == "yandex"
+        val statusLabel = if (yandex && receipt.phase == "unknown")
+            context.getString(R.string.commands_yandex_unconfirmed) else receipt.label
         // Built-in receipts preview the current utterance. Other recipes may return private data.
         val builtIn = receipt.kind in setOf("calendar", "reminder", "timer", "alarm")
         val hideContent = !builtIn && AppSettings.appLock(context) &&
@@ -37,12 +40,12 @@ internal fun readCaptureResult(context: Context, noteId: String): CaptureResult 
         val finished = receipt.phase in setOf("completed", "failed", "unknown")
         if (hideContent) {
             val status = when (receipt.phase) {
-                "completed" -> R.string.capture_done
-                "failed" -> R.string.commands_smart_unsupported
-                "unknown" -> R.string.commands_smart_unknown
-                else -> R.string.commands_smart_processing
+                "completed" -> context.getString(R.string.capture_done)
+                "failed" -> context.getString(R.string.commands_smart_unsupported)
+                "unknown" -> statusLabel
+                else -> context.getString(R.string.commands_smart_processing)
             }
-            return CaptureResult(context.getString(status), finished = finished, commandId = noteId, ok = receipt.ok)
+            return CaptureResult(status, finished = finished, commandId = noteId, ok = receipt.ok)
         }
         val reminder = when {
             receipt.reminderMinutes > 0 -> context.getString(R.string.commands_reminder_before, receipt.reminderMinutes)
@@ -59,10 +62,10 @@ internal fun readCaptureResult(context: Context, noteId: String): CaptureResult 
         }
         val label = when {
             receipt.ok && receipt.kind in setOf("calendar", "reminder") -> context.getString(R.string.capture_event_created)
-            receipt.ok && receipt.kind == "yandex" -> receipt.label
+            yandex && finished -> statusLabel
             else -> "${context.getString(kind)} · ${receipt.label}"
         }
-        val title = if (receipt.ok && receipt.kind == "yandex") receipt.name else receipt.title
+        val title = if (yandex && finished) receipt.name else receipt.title
         return CaptureResult(
             label,
             title,

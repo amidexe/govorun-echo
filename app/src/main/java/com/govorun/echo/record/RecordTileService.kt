@@ -1,7 +1,9 @@
 package com.govorun.echo.record
 
+import android.Manifest
 import android.app.PendingIntent
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.drawable.Icon
 import android.os.Build
 import android.service.quicksettings.Tile
@@ -54,38 +56,39 @@ class RecordTileService : TileService() {
         if (state is RecordingState.Recording || state is RecordingState.Starting) {
             RecordingBus.stopping.value = true
             runCatching { startService(RecordingService.stopIntent(this)) }.onFailure { RecordingBus.stopping.value = false; Log.w(TAG, "event=tile_stop_rejected", it) }
-            present(existingOnly = true)
+            if (!isLocked) present(existingOnly = true)
             return
         }
         present(existingOnly = false)
     }
 
     private fun present(existingOnly: Boolean) {
-        if (!existingOnly && checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            val allow = Runnable { runCatching { openActivity(AppEntry.intent(this)) }.onFailure { showStartError() } }
-            if (isLocked) unlockAndRun(allow) else allow.run()
+        if (isLocked) {
+            openRecordingCard(existingOnly, fromLockedShade = true)
             return
         }
-        if (!isLocked) {
-            val inApp = runCatching { TilePresentation.inApp?.invoke(existingOnly, ::openActivity) }
-                .onFailure { Log.w(TAG, "event=tile_app_rejected type=${it.javaClass.simpleName}") }
-            if (inApp.getOrNull() == true) {
-                Log.i(TAG, "event=tile_app_open")
-                return
-            }
-            if (TilePresentation.show?.invoke(this, existingOnly) == true) {
-                Log.i(TAG, "event=tile_dialog_open")
-                return
-            }
+        if (!existingOnly && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            runCatching { openActivity(AppEntry.intent(this)) }.onFailure { showStartError() }
+            return
         }
-        // Android puts QS dialogs behind keyguard. The recording card can appear above it.
+        val inApp = runCatching { TilePresentation.inApp?.invoke(existingOnly, ::openActivity) }
+            .onFailure { Log.w(TAG, "event=tile_app_rejected type=${it.javaClass.simpleName}") }
+        if (inApp.getOrNull() == true) {
+            Log.i(TAG, "event=tile_app_open")
+            return
+        }
+        if (TilePresentation.show?.invoke(this, existingOnly) == true) {
+            Log.i(TAG, "event=tile_dialog_open")
+            return
+        }
         openRecordingCard(existingOnly)
     }
 
-    private fun openRecordingCard(existingOnly: Boolean) {
+    private fun openRecordingCard(existingOnly: Boolean, fromLockedShade: Boolean = false) {
         Log.i(TAG, "event=tile_card_open")
         val card = AppEntry.recording(this, existingOnly)
             .putExtra(AppEntry.TILE_RECORDING_EXTRA, true)
+            .putExtra(AppEntry.LOCKED_SHADE_RECORDING_EXTRA, fromLockedShade)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         runCatching { openActivity(card) }
             .onFailure { Log.w(TAG, "event=tile_card_rejected", it); showStartError() }

@@ -29,6 +29,7 @@ internal object AppEntry {
 
     const val SHORTCUT_COMMAND_ACTION = "com.govorun.echo.SAY_COMMAND"
     const val TILE_RECORDING_EXTRA = "echo_tile_recording"
+    const val LOCKED_SHADE_RECORDING_EXTRA = "echo_locked_shade_recording"
     const val WIDGET_RECORDING_EXTRA = "echo_widget_recording"
 
     fun intent(context: Context): Intent = requireNotNull(context.packageManager.getLaunchIntentForPackage(context.packageName)) { "no launcher activity" }

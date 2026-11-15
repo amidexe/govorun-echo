@@ -54,19 +54,23 @@ internal fun android.app.Activity.shareText(text: String) {
     startActivity(Intent.createChooser(send, null))
 }
 
-internal fun android.app.Activity.confirmDialog(
+internal fun MainActivity.confirmDialog(
     title: Int,
     text: Int,
     action: Int,
     onConfirm: () -> Unit,
 ) {
-    AlertDialog
+    noteConfirmation?.dismiss()
+    val dialog = AlertDialog
         .Builder(this)
         .setTitle(title)
         .setMessage(text)
         .setPositiveButton(action) { _, _ -> onConfirm() }
         .setNegativeButton(R.string.action_cancel, null)
-        .show()
+        .create()
+    noteConfirmation = dialog
+    dialog.setOnDismissListener { if (noteConfirmation === dialog) noteConfirmation = null }
+    dialog.show()
 }
 
 internal const val UNLOCK_TAPS = 5

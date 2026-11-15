@@ -20,6 +20,7 @@ import kotlinx.coroutines.launch
 /** Wires note actions to root-owned state and existing operation hosts. */
 internal fun MainActivity.createNotesActions(
     ui: NotesUiState,
+    navigation: AppNavigation,
     scope: CoroutineScope,
     client: RecognitionClient,
     playing: () -> NotePlayer.State,
@@ -46,8 +47,7 @@ internal fun MainActivity.createNotesActions(
                         false,
                     )
                     reload()
-                    openId = id
-                    screen = Screen.Note
+                    navigation.open(Screen.Note, id, query)
                 }
             },
             onSetSeen = { ids, unseen ->
@@ -76,15 +76,15 @@ internal fun MainActivity.createNotesActions(
                 }
             },
             onNewText = {
-                openId = NoteText.create(NoteStore.root(this@createNotesActions))
+                val id = NoteText.create(NoteStore.root(this@createNotesActions))
                 changes++
-                screen = Screen.Note
+                navigation.open(Screen.Note, id)
             },
             onRecord = {
                 player.stop()
                 // A new recording made from inside a note is shown in the list, where its card
                 // is.
-                if (screen == Screen.Note) screen = Screen.Notes
+                if (navigation.current.screen == Screen.Note) navigation.showNotes()
                 if (microphone) {
                     startForegroundService(
                         RecordingService.startIntent(
@@ -104,19 +104,25 @@ internal fun MainActivity.createNotesActions(
             onPauseRecording = { on ->
                 startService(RecordingService.pauseIntent(this@createNotesActions, on))
             },
-            onSettings = { screen = Screen.Settings },
-            onTrash = { screen = Screen.Trash },
+            onSettings = { navigation.open(Screen.Settings) },
+            onTrash = { navigation.open(Screen.Trash) },
             trashCount = trashCount,
             onHelp = { onHelp() },
             onOpenFilters = { filtersOpen = true },
             onFilter = { filter = it },
             onTab = {
-                screen = Screen.Notes
+                navigation.showNotes()
                 tab = it
                 filter = NotesFilter()
                 query = null
             },
-            onToggleSearch = { query = if (query == null) "" else null },
+            onToggleSearch = {
+                searchFocusRequested = query == null
+                query = if (searchFocusRequested) "" else null
+            },
+            takeSearchFocusRequest = {
+                searchFocusRequested.also { searchFocusRequested = false }
+            },
             onQueryChange = { query = it },
             onClearSelection = {
                 selected = emptySet()
@@ -139,9 +145,12 @@ internal fun MainActivity.createNotesActions(
                 )
             },
             onSplit = { id ->
+                val source = navigation.current
                 splitNote(id, { playing().noteId }, player, scope) {
-                    screen = Screen.Notes
-                    reload()
+                    scope.launch {
+                        navigation.back(source)
+                        reload()
+                    }
                 }
             },
             onMerge = { ids ->

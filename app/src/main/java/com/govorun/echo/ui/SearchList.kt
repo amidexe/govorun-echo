@@ -130,7 +130,7 @@ internal fun SearchTopBar(
     actions: NotesActions,
 ) {
     val focus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { focus.requestFocus() }
+    LaunchedEffect(Unit) { if (actions.takeSearchFocusRequest()) focus.requestFocus() }
     androidx.compose.material3.TopAppBar(
         colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
         navigationIcon = {

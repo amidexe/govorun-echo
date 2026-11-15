@@ -118,8 +118,8 @@ internal fun NotesScreen(
     val resources = androidx.compose.ui.platform.LocalResources.current
     val searching = query != null
     // A search asks the index off the main thread; until its answer to this very request is in, the list shown stays.
-    val answer by androidx.compose.runtime.produceState<Pair<String, com.govorun.echo.notes.NoteIndex.Found?>?>(null, query, notes) {
-        value = if (query.isNullOrBlank()) null else query to kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { com.govorun.echo.notes.NoteIndex.get(context).find(query, notes) }.getOrNull() }
+    val answer by androidx.compose.runtime.produceState<Pair<String, com.govorun.echo.notes.NoteIndex.Found?>?>(null, query, notes, notesLoaded) {
+        value = if (!notesLoaded || query.isNullOrBlank()) null else query to kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { com.govorun.echo.notes.NoteIndex.get(context).find(query, notes) }.getOrNull() }
     }
     val ready = query.isNullOrBlank() || answer?.first == query
     val found = answer?.second?.takeIf { ready }
@@ -210,7 +210,8 @@ internal fun NotesScreen(
         ) { padding ->
             Box(Modifier.fillMaxSize().padding(padding)) {
                 Column(Modifier.fillMaxSize()) {
-                if (notesLoaded) LazyColumn(
+                // A placeholder list would clamp the saved index to zero before results arrive.
+                if (notesLoaded && (ready || shown[0] != null)) LazyColumn(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                     state = list,
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = DOCK_CLEARANCE),

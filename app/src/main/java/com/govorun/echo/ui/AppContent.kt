@@ -13,7 +13,9 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -21,11 +23,13 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.setValue
+import com.govorun.echo.AppEntry
 import com.govorun.echo.AppSettings
 import com.govorun.echo.notes.NoteStore
 import com.govorun.echo.notes.NoteTrash
@@ -34,6 +38,7 @@ import com.govorun.echo.recognition.RecognitionStatus
 import com.govorun.echo.record.RecordingBus
 import com.govorun.echo.record.RecordingService
 import com.govorun.echo.record.RecordingState
+import com.govorun.echo.record.SavedNotice
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -42,7 +47,18 @@ import kotlinx.coroutines.withContext
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun MainActivity.App() {
-    val ui = remember { NotesUiState(AppSettings.lastTag(this)) }
+    val ui = rememberSaveable(saver = NotesUiState.Saver) { NotesUiState(AppSettings.lastTag(this)) }
+    val navigation = rememberSaveable(saver = AppNavigation.Saver) { AppNavigation() }
+    val current = navigation.current
+    DisposableEffect(current.key) { onDispose { noteConfirmation?.dismiss() } }
+    val pageStates = rememberSaveableStateHolder()
+    val previousKeys = remember { navigation.pages.mapTo(mutableSetOf()) { it.key } }
+    val activeKeys = navigation.pages.mapTo(mutableSetOf()) { it.key }
+    SideEffect {
+        (previousKeys - activeKeys).forEach(pageStates::removeState)
+        previousKeys.clear()
+        previousKeys.addAll(activeKeys)
+    }
     LaunchedEffect(ui.filter.tag) { AppSettings.setLastTag(this@App, ui.filter.tag) }
     with(ui) {
         // Keep the list itself alive while the animated navigation shows a note.
@@ -57,50 +73,42 @@ internal fun MainActivity.App() {
         val recordingState by RecordingBus.state.collectAsState()
         val scope = rememberCoroutineScope()
         val client = remember { RecognitionClient(this@App) }
-        LaunchedEffect(commandHistoryId, commandHistoryOpenVersion) {
-            if (commandHistoryId != null) screen = Screen.CommandHistory
-        }
-        LaunchedEffect(asked) {
-            asked?.let {
+        LaunchedEffect(pendingOpen) {
+            val intent = pendingOpen ?: return@LaunchedEffect
+            intent.getStringExtra(AppEntry.COMMAND_EXTRA)?.let { id ->
+                navigation.openFromIntent(Screen.CommandHistory, id)
+            } ?: SavedNotice.noteOf(intent)?.let { request ->
                 val command = withContext(Dispatchers.IO) {
-                    val dir = NoteStore.noteDir(this@App, it.id)
+                    val dir = NoteStore.noteDir(this@App, request.id)
                     runCatching { org.json.JSONObject(java.io.File(dir, "meta.json").readText()).has("command") }.getOrDefault(false)
                 }
                 if (command) {
-                    commandHistoryId = it.id
-                    screen = Screen.CommandHistory
-                    asked = null
-                    return@LaunchedEffect
+                    navigation.openFromIntent(Screen.CommandHistory, request.id)
+                } else {
+                    if (request.byUser) com.govorun.echo.notes.NoteSeen.set(NoteStore.root(this@App), request.id, false)
+                    navigation.openFromIntent(Screen.Note, request.id)
+                    changes++
                 }
-                if (it.byUser)
-                    com.govorun.echo.notes.NoteSeen.set(
-                        NoteStore.root(this@App),
-                        it.id,
-                        false,
-                    )
-                openId = it.id
-                screen = Screen.Note
-                changes++
-                asked = null
             }
+            filtersOpen = false
+            selected = emptySet()
+            selectMode = false
+            pendingOpen = null
         }
-        var editingCommand by remember { mutableStateOf<com.govorun.echo.commands.Command?>(null) }
-        var licenseName by remember { mutableStateOf("") }
         var commandsVersion by remember { mutableIntStateOf(0) }
         var advancedMode by remember { mutableStateOf(AppSettings.advanced(this@App)) }
-        val settingsStateHolder = rememberSaveableStateHolder()
         var govorun by remember { mutableStateOf(GovorunState.Checking) }
         var govorunVersion by remember { mutableStateOf<String?>(null) }
         var install by remember { mutableStateOf(InstallInfo.cached(this@App)) }
-        var onboarding by remember { mutableStateOf(!AppSettings.onboardingDone(this@App)) }
-        var onboardingStep by remember { mutableStateOf(OnboardingStep.Welcome) }
+        var onboarding by rememberSaveable { mutableStateOf(!AppSettings.onboardingDone(this@App)) }
+        var onboardingStep by rememberSaveable { mutableStateOf(OnboardingStep.Welcome) }
         var selfTest by remember { mutableStateOf<String?>(null) }
         var selfTestRunning by remember { mutableStateOf(false) }
         var hotkeyEnabled by remember { mutableStateOf(AppSettings.hotkeyEnabled(this@App)) }
         var retention by remember { mutableIntStateOf(AppSettings.retentionDays(this@App)) }
         val snackbar = remember { SnackbarHostState() }
         val deleteBatch = remember { DeleteBatch() }
-        LaunchedEffect(screen) {
+        LaunchedEffect(current.key) {
             if (!deleteBatch.hasPendingUndo) snackbar.currentSnackbarData?.dismiss()
         }
         val paused by RecognitionStatus.pausedReason.collectAsState()
@@ -127,7 +135,7 @@ internal fun MainActivity.App() {
                     query = null
                     selected = emptySet()
                     selectMode = false
-                    screen = Screen.Notes
+                    navigation.showNotes()
                     changes++
                 }
             }
@@ -197,11 +205,12 @@ internal fun MainActivity.App() {
         LaunchedEffect(fairQueue) { if (fairQueue > 0) changes++ }
         val reload = { changes++ }
         val trashCount =
-            remember(changes, screen) { NoteTrash.root(this@App).listFiles()?.size ?: 0 }
+            remember(changes, current.screen) { NoteTrash.root(this@App).listFiles()?.size ?: 0 }
         val tags = remember(changes, notes) { TagHost.read(this@App, notes) }
         val notesActions =
             createNotesActions(
                 ui,
+                navigation,
                 scope,
                 client,
                 { playing },
@@ -234,7 +243,8 @@ internal fun MainActivity.App() {
             createSettingsActions(
                 { notes },
                 scope,
-                onNavigate = { screen = it },
+                onNavigate = { screen -> if (navigation.current == current) navigation.open(screen) },
+                onBack = { navigation.back(current) },
                 onHotkey = { hotkeyEnabled = it },
                 onRetention = { retention = it },
                 onChanged = { changes++ },
@@ -265,6 +275,7 @@ internal fun MainActivity.App() {
                     AppSettings.setOnboardingDone(this@App, true)
                     onboarding = false
                 },
+                onClose = if (AppSettings.onboardingDone(this@App)) ({ onboarding = false }) else null,
                 onSelfTest = {
                     scope.launch {
                         selfTestRunning = true
@@ -280,23 +291,16 @@ internal fun MainActivity.App() {
             enabled =
                 selected.isNotEmpty() ||
                     selectMode ||
-                    screen != Screen.Notes ||
+                    current.screen != Screen.Notes ||
                     query != null ||
                     tab != NotesTab.All
         ) {
             when {
+                current.screen != Screen.Notes -> navigation.back(current)
                 selected.isNotEmpty() || selectMode -> {
                     selected = emptySet()
                     selectMode = false
                 }
-                screen == Screen.CommandEdit -> screen = Screen.Commands
-                screen == Screen.License -> screen = Screen.Licenses
-                screen == Screen.CommandHistory -> { commandHistoryId = null; screen = Screen.Commands }
-                screen == Screen.Commands || screen == Screen.Journal || screen == Screen.About ||
-                    screen == Screen.Experiments ->
-                    screen = Screen.Settings
-                screen == Screen.Licenses -> screen = Screen.About
-                screen != Screen.Notes -> screen = Screen.Notes
                 tab != NotesTab.All && query == null -> {
                     tab = NotesTab.All
                     filter = NotesFilter()
@@ -307,94 +311,100 @@ internal fun MainActivity.App() {
         // The sheet for taking notes out belongs to no screen: it opens over the list and over a
         // note alike.
         exporter.Sheet()
-        EchoNavigation(notes, tab, notesActions) { drawer, onMenu ->
+        EchoNavigation(notes, tab, notesActions, current.key) { drawer, onMenu ->
             AnimatedContent(
-                screen,
+                current,
                 transitionSpec = { fadeIn(tween(180)) togetherWith fadeOut(tween(120)) },
                 label = "screen",
             ) { shown ->
-                when (shown) {
-                    Screen.Notes -> {
-                        NotesScreen(
-                            notes,
-                            notesLoaded,
-                            notesList,
-                            notesHeader,
-                            tab,
-                            filter,
-                            recordingState,
-                            SetupState(microphone, govorun),
-                            selected,
-                            selectMode,
-                            query,
-                            paused,
-                            playing,
-                            snackbar,
-                            notesActions,
-                            drawer,
-                            onMenu,
-                        )
-                        if (filtersOpen)
-                            FilterSheet(filter, { filter = it }, { filtersOpen = false })
-                    }
-                    Screen.Note -> {
-                        val note = notes.firstOrNull { it.id == openId }
-                        if (note == null) {
-                            // A note just made (typed, shared in) is on disk before the list is
-                            // read again: it waits; a gone one leaves.
-                            if (
-                                openId?.let {
-                                    java.io.File(NoteStore.root(this@App), it).isDirectory
-                                } != true
-                            )
-                                LaunchedEffect(Unit) { screen = Screen.Notes }
-                        } else {
-                            NoteScreen(
-                                note,
-                                playing.takeIf { it.noteId == note.id },
-                                recordingState is RecordingState.Recording ||
-                                    recordingState is RecordingState.Starting,
-                                notesActions,
-                                snackbar,
+                pageStates.SaveableStateProvider(shown.key) {
+                    when (shown.screen) {
+                        Screen.Notes -> {
+                            NotesScreen(
+                                notes,
+                                notesLoaded,
+                                notesList,
+                                notesHeader,
+                                tab,
+                                filter,
+                                recordingState,
+                                SetupState(microphone, govorun),
+                                selected,
+                                selectMode,
                                 query,
-                            ) {
-                                screen = Screen.Notes
+                                paused,
+                                playing,
+                                snackbar,
+                                notesActions,
+                                drawer,
+                                onMenu,
+                            )
+                            if (shown == current && filtersOpen)
+                                FilterSheet(filter, { filter = it }, { filtersOpen = false })
+                        }
+                        Screen.Note -> {
+                            val note = notes.firstOrNull { it.id == shown.argument }
+                            if (note == null) {
+                                // A note just made (typed, shared in) is on disk before the list is
+                                // read again: it waits; a gone one leaves.
+                                if (
+                                    shown.argument?.let {
+                                        java.io.File(NoteStore.root(this@App), it).isDirectory
+                                    } != true
+                                )
+                                    LaunchedEffect(Unit) { navigation.back(shown) }
+                            } else {
+                                NoteScreen(
+                                    note,
+                                    playing.takeIf { it.noteId == note.id },
+                                    recordingState is RecordingState.Recording ||
+                                        recordingState is RecordingState.Starting,
+                                    notesActions,
+                                    snackbar,
+                                    shown == current,
+                                    shown.query,
+                                ) {
+                                    navigation.back(shown)
+                                }
                             }
                         }
+                        Screen.Settings -> {
+                            SettingsRoute(
+                                notes.size,
+                                backupHost.changed,
+                                hotkeyEnabled,
+                                themeMode,
+                                dynamicColors,
+                                retention,
+                                advancedMode,
+                                settingsActions,
+                            )
+                        }
+                        else ->
+                            SecondaryScreens(
+                                shown,
+                                install,
+                                advancedMode,
+                                commandsVersion,
+                                settingsActions,
+                                onNavigate = { screen -> if (navigation.current == shown) navigation.open(screen) },
+                                onBack = { navigation.back(shown) },
+                                onLicenses = {
+                                    if (navigation.current == shown) navigation.open(Screen.Licenses)
+                                },
+                                onLicense = {
+                                    if (navigation.current == shown) navigation.open(Screen.License, it)
+                                },
+                                onCommand = {
+                                    if (navigation.current == shown) navigation.open(Screen.CommandEdit, it?.id)
+                                },
+                                onTemplate = {
+                                    if (navigation.current == shown) navigation.open(Screen.CommandCreate, it.name)
+                                },
+                                onCommandsChanged = { commandsVersion++ },
+                                onNotesChanged = { changes++ },
+                            )
                     }
-                    Screen.Settings -> settingsStateHolder.SaveableStateProvider("settings") {
-                        SettingsRoute(
-                            notes.size,
-                            backupHost.changed,
-                            hotkeyEnabled,
-                            themeMode,
-                            dynamicColors,
-                            retention,
-                            advancedMode,
-                            settingsActions,
-                        )
-                    }
-                    else ->
-                        SecondaryScreens(
-                            shown,
-                            install,
-                            advancedMode,
-                            licenseName,
-                            editingCommand,
-                            commandsVersion,
-                            settingsActions,
-                            onNavigate = { screen = it },
-                            onLicense = {
-                                licenseName = it
-                                screen = Screen.License
-                            },
-                            onCommand = {
-                                editingCommand = it
-                                screen = Screen.CommandEdit
-                            },
-                            onCommandsChanged = { commandsVersion++ },
-                            onNotesChanged = { changes++ },
-                        )
                 }
             }
         }

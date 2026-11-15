@@ -37,6 +37,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -89,7 +90,8 @@ private fun FairProgress(run: FairRuns.Run?) {
 @Composable
 internal fun rememberFairState(noteId: String): FairState {
     val scope = rememberCoroutineScope()
-    return remember(noteId) { FairState(scope).also { state -> FairRuns.running(noteId)?.let { state.follow(it) } } }
+    val shown = rememberSaveable(noteId) { mutableStateOf(false) }
+    return remember(noteId) { FairState(scope, shown).also { state -> FairRuns.running(noteId)?.let { state.follow(it) } } }
 }
 
 /** Whether «Улучшить через Говорун» is offered for [note]: a build that talks to Govorun and a note Govorun would improve. */

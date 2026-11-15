@@ -19,6 +19,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,6 +49,7 @@ internal fun NoteScreen(
     recording: Boolean,
     actions: NotesActions,
     snackbar: androidx.compose.material3.SnackbarHostState,
+    active: Boolean,
     /** The search the note was opened from: its words are lit in the text, one after another. */
     query: String? = null,
     onBack: () -> Unit,
@@ -62,6 +64,7 @@ internal fun NoteScreen(
         recording,
         actions,
         snackbar,
+        active,
         query,
         onBack,
     )
@@ -76,6 +79,7 @@ private fun NoteScreenContent(
     recording: Boolean,
     actions: NotesActions,
     snackbar: androidx.compose.material3.SnackbarHostState,
+    active: Boolean,
     query: String?,
     onBack: () -> Unit,
 ) {
@@ -89,7 +93,7 @@ private fun NoteScreenContent(
             else fairState.cancel(context, note)
         } else onBack()
     }
-    BackHandler(enabled = fairState.editing) { goBack() }
+    BackHandler(enabled = active && fairState.editing) { goBack() }
     // The note opened: Govorun's words for what it keeps of it, and what it has answered meanwhile
     // is collected.
     if (com.govorun.echo.smart.Smart.available) {
@@ -155,7 +159,7 @@ private fun NoteScreenContent(
         leaving = false
     }
     val current = draft
-    BackHandler(enabled = current != null) {
+    BackHandler(enabled = active && current != null) {
         if (current?.changed == true) leaving = true else leave()
     }
     val draftText = remember(current) { current?.let { DraftText.of(it.phrases) } }
@@ -173,7 +177,7 @@ private fun NoteScreenContent(
     // Opened from a search: its words are lit and the top bar steps through them, the player
     // following, until it is closed.
     val find = rememberFindInNote(note, wordsRead, query, player?.positionMs)
-    var finding by remember(find) { mutableStateOf(find != null) }
+    var finding by rememberSaveable(query) { mutableStateOf(!query.isNullOrBlank()) }
     val shownFind = find?.takeIf { finding && current == null }
     val stepFind = { by: Int ->
         if (shownFind != null) {

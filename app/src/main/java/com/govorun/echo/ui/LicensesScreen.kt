@@ -156,7 +156,12 @@ internal fun LicenseScreen(
                         }
                         component.link?.let { link ->
                             ProductDivider()
-                            SettingsLinkRow(PhosphorIcons.Regular.Globe, link.removePrefix("https://"), onClick = {
+                            val title = if (component == notices.app) {
+                                stringResource(R.string.licenses_echo_source)
+                            } else {
+                                link.removePrefix("https://")
+                            }
+                            SettingsLinkRow(PhosphorIcons.Regular.Globe, title, onClick = {
                                 runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link))) }
                             })
                         }

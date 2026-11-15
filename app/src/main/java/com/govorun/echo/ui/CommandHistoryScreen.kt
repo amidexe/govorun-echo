@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -27,7 +28,7 @@ import kotlinx.coroutines.withContext
 @Composable
 internal fun CommandHistoryScreen(onBack: () -> Unit, initialId: String? = null) {
     val context = LocalContext.current
-    var entries by remember { mutableStateOf(emptyList<CommandHistory.Entry>()) }
+    var entries by remember { mutableStateOf<List<CommandHistory.Entry>?>(null) }
     val list = rememberLazyListState()
     val format = remember { DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT) }
     LaunchedEffect(Unit) {
@@ -35,16 +36,21 @@ internal fun CommandHistoryScreen(onBack: () -> Unit, initialId: String? = null)
             entries = withContext(Dispatchers.IO) { CommandHistory.entries(context) }
         }
     }
-    val entryIndex = entries.indexOfFirst { it.id == initialId }
+    val entryIndex = entries?.indexOfFirst { it.id == initialId } ?: -1
+    var positioned by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(initialId, entryIndex) {
-        if (entryIndex >= 0) list.scrollToItem(entryIndex)
+        if (!positioned && entryIndex >= 0) {
+            list.scrollToItem(entryIndex)
+            positioned = true
+        }
     }
     ProductScaffold(title = stringResource(R.string.commands_history), onBack = onBack) { padding ->
+        val loaded = entries ?: return@ProductScaffold
         LazyColumn(Modifier.padding(padding), state = list, contentPadding = productScreenPadding()) {
-            if (entries.isEmpty()) item {
+            if (loaded.isEmpty()) item {
                 SettingsInfoRow(PhosphorIcons.Regular.Lightning, stringResource(R.string.commands_history_empty))
             }
-            items(entries, key = { it.id }) { entry ->
+            items(loaded, key = { it.id }) { entry ->
                 val result = entry.result
                 val reminder = when {
                     result.reminderMinutes > 0 -> stringResource(R.string.commands_reminder_before, result.reminderMinutes)

@@ -18,6 +18,7 @@ internal fun TileRecordingCard(
     systemTransition: Boolean = false,
     purpose: CapturePurpose = CapturePurpose.NOTE,
     onOpenNote: ((String) -> Unit)? = null,
+    fromLockedTile: Boolean = false,
 ) {
     val recording = state as? RecordingState.Recording
     val activePurpose = recording?.purpose ?: purpose
@@ -43,5 +44,6 @@ internal fun TileRecordingCard(
     CaptureStage(label, onClose, detail = if (active) elapsed else "",
         result = commandResult, onStop = onStop.takeIf { active }, onOpen = open,
         closeRequested = closeRequested,
-        animateEntrance = !systemTransition, showBackdrop = !systemTransition)
+        animateEntrance = !systemTransition, showBackdrop = !systemTransition,
+        fromLockedTile = fromLockedTile)
 }

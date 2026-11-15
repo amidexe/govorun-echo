@@ -4,7 +4,9 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.ParcelFileDescriptor
 import android.util.Log
 import com.govorun.api.v1.IContinuousRecognitionCallback
@@ -14,6 +16,7 @@ import java.util.concurrent.ConcurrentSkipListMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import com.govorun.echo.notes.estimatedWords
 
 /** Phrases that Govorun's speech detector cut out of the stream, in order. */
@@ -55,19 +58,22 @@ internal class LiveSession(
     private val queue = LinkedBlockingQueue<ByteArray>(MAX_QUEUED_BUFFERS)
     private val ready = CountDownLatch(1)
     private val ended = CountDownLatch(1)
+    private val main = Handler(Looper.getMainLooper())
+    private val waitForReady = Runnable { fail("not_ready") }
     private val fedBytes = java.util.concurrent.atomic.AtomicLong(0)
     private val arrivals = java.util.concurrent.CopyOnWriteArrayList<Pair<Long, String>>()
     private val timed = ConcurrentSkipListMap<Long, com.govorun.echo.notes.NoteStore.Phrase>()
-    private var service: IRecognitionService? = null
-    private var connection: ServiceConnection? = null
-    private var output: ParcelFileDescriptor? = null
+    @Volatile private var service: IRecognitionService? = null
+    private val connection = java.util.concurrent.atomic.AtomicReference<ServiceConnection>()
+    @Volatile private var output: ParcelFileDescriptor? = null
 
-    @Volatile var failed = false
-        private set
+    private val failure = AtomicBoolean(false)
+    val failed: Boolean get() = failure.get()
 
     @Volatile private var stopped = false
 
     @Volatile private var closing = false
+    @Volatile private var inputEnded = false
 
     /** Connects in the background; returns at once. */
     fun start() {
@@ -77,7 +83,9 @@ internal class LiveSession(
                 override fun onServiceConnected(
                     name: ComponentName?,
                     binder: IBinder?,
-                ) = begin(IRecognitionService.Stub.asInterface(binder))
+                ) {
+                    Thread({ begin(IRecognitionService.Stub.asInterface(binder)) }, "live-writer").start()
+                }
 
                 override fun onServiceDisconnected(name: ComponentName?) = lost()
 
@@ -85,7 +93,8 @@ internal class LiveSession(
 
                 override fun onNullBinding(name: ComponentName?) = fail("null_binding")
             }
-        connection = link
+        connection.set(link)
+        main.postDelayed(waitForReady, READY_TIMEOUT_MS)
         val bound =
             runCatching {
                 appContext.bindService(Intent(GovorunProvider.SERVICE_ACTION).setComponent(component), link, Context.BIND_AUTO_CREATE)
@@ -94,6 +103,7 @@ internal class LiveSession(
     }
 
     private fun begin(binder: IRecognitionService) {
+        if (failed) return
         try {
             service = binder
             check(binder.protocolVersion == 1) { "protocol" }
@@ -103,6 +113,10 @@ internal class LiveSession(
             output = pipe[1]
             val callback = callback()
             pipe[0].use { input ->
+                if (failed) {
+                    pipe[1].close()
+                    return
+                }
                 if (binder.capabilities and CAPABILITY_CONTINUOUS_PROFILES != 0) {
                     val flag =
                         (if (binder.capabilities and CAPABILITY_WORD_TIMESTAMPS != 0) FLAG_WORD_TIMESTAMPS else 0) or
@@ -113,7 +127,11 @@ internal class LiveSession(
                     binder.recognizeContinuous(appContext.packageName, sessionId, input, SAMPLE_RATE, 1, 16, callback)
                 }
             }
-            Thread(::writeLoop, "live-writer").start()
+            if (failed) {
+                cancelRemote()
+            } else {
+                writeLoop()
+            }
         } catch (error: Exception) {
             fail(error.message ?: error.javaClass.simpleName)
         }
@@ -131,14 +149,14 @@ internal class LiveSession(
     /** Tells Govorun the audio is over; its last phrase and the end marker follow. */
     fun finish() {
         closing = true
-        if (!failed) queue.put(END)
+        if (!failed) queue.offer(END)
     }
 
     /** The full text when the stream ended cleanly, or null when the file must be recognized instead. */
     fun awaitText(timeoutMs: Long): String? {
         if (interimOnly) return null
         val waitedFrom = System.nanoTime()
-        ended.await(timeoutMs, TimeUnit.MILLISECONDS)
+        if (!ended.await(timeoutMs, TimeUnit.MILLISECONDS)) fail("finish_timeout")
         Log.i(TAG, "event=live_awaited ms=${(System.nanoTime() - waitedFrom) / 1_000_000} stopped=$stopped failed=$failed")
         val text = if (stopped && !failed) transcript.text() else null
         release()
@@ -166,10 +184,15 @@ internal class LiveSession(
             if (!ready.await(READY_TIMEOUT_MS, TimeUnit.MILLISECONDS)) return fail("not_ready")
             stream.use { out ->
                 while (!failed) {
-                    val buffer = queue.poll(1, TimeUnit.SECONDS) ?: continue
+                    val buffer = queue.poll(1, TimeUnit.SECONDS)
+                    if (buffer == null) {
+                        if (closing) break
+                        continue
+                    }
                     if (buffer === END) break
                     out.write(buffer)
                 }
+                if (!failed) inputEnded = true
             }
         } catch (error: Exception) {
             fail("write_${error.javaClass.simpleName}")
@@ -179,7 +202,8 @@ internal class LiveSession(
     private fun callback() =
         object : IContinuousRecognitionCallback.Stub() {
             override fun onReady(sessionId_: String?) {
-                if (sessionId_ == sessionId) {
+                if (sessionId_ == sessionId && !failed) {
+                    main.removeCallbacks(waitForReady)
                     ready.countDown()
                     onReady()
                 }
@@ -189,7 +213,7 @@ internal class LiveSession(
                 sessionId_: String?,
                 active: Boolean,
             ) {
-                if (sessionId_ != sessionId) return
+                if (sessionId_ != sessionId || failed) return
                 Log.i(TAG, "event=live_speech active=$active fedMs=${fedBytes.get() * 1_000L / BYTES_PER_SECOND}")
                 onSpeech(active)
             }
@@ -199,7 +223,7 @@ internal class LiveSession(
                 sequence: Long,
                 text: String?,
             ) {
-                if (sessionId_ != sessionId) return
+                if (sessionId_ != sessionId || failed) return
                 Log.i(TAG, "event=live_phrase seq=$sequence chars=${text.orEmpty().length} fedMs=${fedBytes.get() * 1_000L / BYTES_PER_SECOND}")
                 transcript.add(sequence, text.orEmpty())
                 if (!text.isNullOrBlank()) arrivals += (fedBytes.get() * 1_000L / BYTES_PER_SECOND) to text.trim()
@@ -214,7 +238,7 @@ internal class LiveSession(
                 wordEndsMs: LongArray?,
                 words: Array<String>?,
             ) {
-                if (sessionId_ != sessionId || text.isNullOrBlank() || wordStartsMs == null || wordEndsMs == null || wordStartsMs.isEmpty() || wordEndsMs.isEmpty()) return
+                if (sessionId_ != sessionId || failed || text.isNullOrBlank() || wordStartsMs == null || wordEndsMs == null || wordStartsMs.isEmpty() || wordEndsMs.isEmpty()) return
                 timed[sequence] = timedPhrase(text, wordStartsMs, wordEndsMs, words)
             }
 
@@ -223,13 +247,14 @@ internal class LiveSession(
                 active: Boolean,
                 elapsedRealtimeMs: Long,
             ) {
-                if (sessionId_ != sessionId) return
+                if (sessionId_ != sessionId || failed) return
                 Log.i(TAG, "event=primary_dictation active=$active fedMs=${fedBytes.get() * 1_000L / BYTES_PER_SECOND}")
                 onDictation(active)
             }
 
             override fun onStopped(sessionId_: String?) {
-                if (sessionId_ != sessionId) return
+                if (sessionId_ != sessionId || failed) return
+                if (!inputEnded) return fail("unexpected_stop")
                 stopped = true
                 ended.countDown()
             }
@@ -248,31 +273,33 @@ internal class LiveSession(
     }
 
     private fun fail(reason: String) {
-        if (!failed) {
-            Log.i(TAG, "event=live_failed reason=$reason")
-            onFailed(reason)
-            // Govorun took the engine for its own dictation (9), or something else broke the stream: the text then comes from the file after the stop.
-            // A restart that fails again says nothing new; the first failure is already in the journal.
-            if (reason != "cancelled" && !closing && !interimOnly) {
-                com.govorun.echo.Journal.add(
-                    appContext,
-                    com.govorun.echo.Journal.RECOGNITION,
-                    appContext.getString(if (reason == "govorun_9") com.govorun.echo.R.string.journal_live_preempted else com.govorun.echo.R.string.journal_live_failed, reason),
-                )
-            }
-        }
-        failed = true
+        if (!failure.compareAndSet(false, true)) return
+        Log.i(TAG, "event=live_failed reason=$reason")
+        main.removeCallbacks(waitForReady)
         queue.clear()
+        queue.offer(END)
         ended.countDown()
         ready.countDown()
         runCatching { output?.close() }
-        runCatching { service?.cancel(appContext.packageName, sessionId) }
         release()
+        onFailed(reason)
+        // A failed remote call must never hold up the microphone or the main thread.
+        if (service != null) Thread(::cancelRemote, "live-cancel").start()
+        if (reason != "cancelled" && !closing && !interimOnly) {
+            com.govorun.echo.Journal.add(
+                appContext,
+                com.govorun.echo.Journal.RECOGNITION,
+                appContext.getString(if (reason == "govorun_9") com.govorun.echo.R.string.journal_live_preempted else com.govorun.echo.R.string.journal_live_failed, reason),
+            )
+        }
+    }
+
+    private fun cancelRemote() {
+        runCatching { service?.cancel(appContext.packageName, sessionId) }
     }
 
     private fun release() {
-        connection?.let { link ->
-            connection = null
+        connection.getAndSet(null)?.let { link ->
             runCatching { appContext.unbindService(link) }
         }
     }

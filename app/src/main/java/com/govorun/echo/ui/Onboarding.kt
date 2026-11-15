@@ -36,6 +36,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.key
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -104,12 +105,13 @@ internal fun OnboardingScreen(
 ) {
     val steps = OnboardingStep.entries
     val index = steps.indexOf(state.step)
+    val scroll = key(state.step) { rememberScrollState() }
     // The screen's own Surface, as a Scaffold gives the others: titles take the text colour of the background, not black.
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
             StepDots(index, steps.size)
             Column(
-                Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 12.dp),
+                Modifier.weight(1f).fillMaxWidth().verticalScroll(scroll).padding(horizontal = 20.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp),
             ) {
                 Spacer(Modifier.height(12.dp))

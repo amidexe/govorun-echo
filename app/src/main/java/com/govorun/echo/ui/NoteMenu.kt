@@ -60,12 +60,14 @@ internal fun NoteMenu(
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     ProductSheet(stringResource(R.string.note_actions_title), onDismiss) {
-        if (!onNoteScreen) {
+        val showAudioGap = onNoteScreen && note.silencedMs >= 2_000
+        if (!onNoteScreen || showAudioGap) {
             Text(
                 listOfNotNull(
-                    formatDayTime(context, note.startedAtMs),
+                    formatDayTime(context, note.startedAtMs).takeUnless { onNoteScreen },
                     formatDuration(note.durationMs).takeIf { note.durationMs > 0 },
-                    stringResource(statusLabel(note)).takeIf { note.mode == "import" || note.mode == "merged" },
+                    if (showAudioGap) stringResource(R.string.note_audio_gap, note.silencedMs / 1_000)
+                    else stringResource(statusLabel(note)).takeIf { note.mode == "import" || note.mode == "merged" },
                 ).joinToString(" · "),
                 modifier = Modifier.padding(horizontal = ProductTokens.Spacing.Lg),
                 style = MaterialTheme.typography.bodySmall,

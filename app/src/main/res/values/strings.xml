@@ -370,7 +370,7 @@
     <string name="deleted_one">Заметка удалена</string>
     <string name="deleted_many">Удалено заметок: %1$d</string>
     <string name="action_undo">Отменить</string>
-    <string name="mic_was_busy">В записи есть пропуск: микрофон был занят %1$s</string>
+    <string name="note_audio_gap">около %1$d с без звука</string>
     <string name="status_queued">в очереди</string>
     <string name="status_held_recording">пауза на время записи</string>
     <string name="action_resume">Продолжить распознавание</string>
@@ -664,6 +664,7 @@
     <string name="journal_backup_failed">Копия в папку не удалась</string>
     <string name="licenses_title">Лицензии открытых компонентов</string>
     <string name="licenses_screen">Лицензии</string>
+    <string name="licenses_echo_source">Исходный код Эхо на GitHub</string>
     <string name="licenses_artifacts">Состав</string>
     <string name="licenses_third_party">Сторонние компоненты</string>
     <string name="update_title">Доступна версия %1$s</string>
@@ -1025,6 +1026,7 @@
     <string name="commands_block_on_lock_screen">Запретить на заблокированном экране</string>
     <string name="commands_lock_screen_blocked">Разблокируйте телефон и повторите команду</string>
     <string name="commands_yandex_started">Яндекс принял запрос на запуск</string>
+    <string name="commands_yandex_unconfirmed">Яндекс не подтвердил запуск</string>
     <string name="commands_yandex_test">Проверить запуск</string>
     <string name="commands_yandex_test_confirm">Яндекс запустит сценарий «%1$s» прямо сейчас.</string>
     <string name="commands_yandex_test_run">Запустить</string>

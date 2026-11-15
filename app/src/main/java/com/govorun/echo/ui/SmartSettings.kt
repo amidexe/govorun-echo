@@ -50,7 +50,7 @@ private fun EnabledSmartSettings() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var auto by remember { mutableStateOf(AppSettings.itogiAuto(context)) }
-    var step by remember { mutableStateOf<String?>(null) }
+    var step by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
     // Read again on every return, so signing in to Govorun and coming back opens the tab at once.
     LifecycleResumeEffect(auto) {
         val job = scope.launch { step = GovorunSmart(context).status().let { if (auto) it.automaticState else it.state }.takeUnless { it == GovorunSmart.READY } }

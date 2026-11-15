@@ -10,6 +10,7 @@ contains and their license texts.
 # Говорун Эхо
 Copyright (c) 2025–2026 Dmitrii Kiselev (amidexe)
 License: GNU General Public License 3.0
+https://github.com/amidexe/govorun-echo
 Код распространяется по GNU GPL версии 3 или, по вашему выбору, любой более поздней версии, без каких-либо гарантий.
 Названия «Говорун Эхо», «Эхо» и «Говорун», изображение птицы и значки приложения под эту лицензию не входят.
 

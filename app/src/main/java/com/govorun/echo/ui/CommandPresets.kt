@@ -47,18 +47,17 @@ private val CommandTemplate.usesSmartFunctions: Boolean get() = this != CommandT
 
 /** One list; every template selection creates a new independent command. */
 @Composable
-internal fun CommandsScreen(commands: List<Command>, onBack: () -> Unit, onOpen: (Command?) -> Unit,
-    onRecipesChanged: () -> Unit) {
+internal fun CommandsScreen(
+    commands: List<Command>,
+    onBack: () -> Unit,
+    onOpen: (Command) -> Unit,
+    onTemplate: (CommandTemplate) -> Unit,
+    onHistory: () -> Unit,
+    onAdvanced: () -> Unit,
+) {
     val context = LocalContext.current
     var templates by remember { mutableStateOf(false) }
-    var advanced by remember { mutableStateOf(false) }
-    var history by remember { mutableStateOf(false) }
     var help by remember { mutableStateOf(false) }
-    androidx.activity.compose.BackHandler(advanced || history) { advanced = false; history = false }
-    when {
-        advanced -> { AdvancedCommandsScreen(commands, { advanced = false }, onOpen, onRecipesChanged); return }
-        history -> { CommandHistoryScreen({ history = false }); return }
-    }
     ProductScaffold(title = stringResource(R.string.commands_title), onBack = onBack) { padding ->
         LazyColumn(Modifier.padding(padding), contentPadding = productScreenPadding(),
             verticalArrangement = Arrangement.spacedBy(ProductTokens.Spacing.Section)) {
@@ -86,10 +85,10 @@ internal fun CommandsScreen(commands: List<Command>, onBack: () -> Unit, onOpen:
             }
             item {
                 SettingsSection("", showTitle = false) {
-                    SettingsLinkRow(PhosphorIcons.Regular.FileText, stringResource(R.string.commands_history), onClick = { history = true })
+                    SettingsLinkRow(PhosphorIcons.Regular.FileText, stringResource(R.string.commands_history), onClick = onHistory)
                     ProductDivider()
                     SettingsLinkRow(PhosphorIcons.Regular.Lightning, stringResource(R.string.commands_other_recipes),
-                        summary = stringResource(R.string.commands_other_recipes_summary), onClick = { advanced = true })
+                        summary = stringResource(R.string.commands_other_recipes_summary), onClick = onAdvanced)
                     ProductDivider()
                     SettingsLinkRow(PhosphorIcons.Regular.Question, stringResource(R.string.commands_launch_title),
                         onClick = { help = true })
@@ -111,7 +110,7 @@ internal fun CommandsScreen(commands: List<Command>, onBack: () -> Unit, onOpen:
     if (templates) ProductChoiceSheet<CommandTemplate?>(title = stringResource(R.string.commands_add_template),
         options = CommandTemplate.entries, selected = null,
         optionLabel = { context.getString(checkNotNull(it).title) }, onDismissRequest = { templates = false },
-        onSelected = { chosen -> chosen?.let { templates = false; onOpen(it.create(context.getString(it.title))) } },
+        onSelected = { chosen -> chosen?.let { templates = false; onTemplate(it) } },
         optionDescription = {
             when {
                 it?.usesSmartFunctions == true -> context.getString(R.string.commands_preset_smart_required)
@@ -122,6 +121,13 @@ internal fun CommandsScreen(commands: List<Command>, onBack: () -> Unit, onOpen:
         },
         optionEnabled = { it != CommandTemplate.Yandex || YandexHome.enabled },
         optionIcon = { if (it?.usesSmartFunctions == true) PhosphorIcons.Regular.Sparkle else null })
+}
+
+@Composable
+internal fun CommandTemplateEditor(template: CommandTemplate, onBack: () -> Unit, onSaved: () -> Unit) {
+    val title = stringResource(template.title)
+    val command = remember(template) { template.create(title) }
+    CommandEditorScreen(command, onBack, onSaved)
 }
 
 /** A native command has a fixed type. Only the person's name, phrase and calendar need editing. */

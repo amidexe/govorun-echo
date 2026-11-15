@@ -71,7 +71,6 @@ import com.govorun.echo.R
 import com.govorun.echo.playback.NotePlayer
 import com.govorun.echo.notes.NoteStore
 import com.product.ui.ProductTokens
-import com.govorun.echo.formatDuration
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -227,13 +226,6 @@ internal fun NoteRow(
                 if (player != null && note.audio.isNotEmpty() && !selecting) InlinePlayer(note, player, actions)
                 stopLabel(note)?.let {
                     Text(stringResource(it), style = noteSupportingStyle(), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                if (note.silencedMs >= 2_000) {
-                    Text(
-                        stringResource(R.string.mic_was_busy, formatDuration(note.silencedMs)),
-                        style = noteSupportingStyle(),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
                 }
             }
             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {

@@ -14,6 +14,7 @@ internal fun MainActivity.createSettingsActions(
     notes: () -> List<NoteStore.Entry>,
     scope: CoroutineScope,
     onNavigate: (Screen) -> Unit,
+    onBack: () -> Unit,
     onHotkey: (Boolean) -> Unit,
     onRetention: (Int) -> Unit,
     onChanged: () -> Unit,
@@ -21,7 +22,7 @@ internal fun MainActivity.createSettingsActions(
     onUnlockExperiments: () -> Unit,
 ): SettingsActions =
     SettingsActions(
-        onBack = { onNavigate(Screen.Notes) },
+        onBack = onBack,
         onOpenAccessibility = {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         },

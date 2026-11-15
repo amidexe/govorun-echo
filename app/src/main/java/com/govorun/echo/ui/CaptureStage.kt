@@ -14,6 +14,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -28,13 +30,14 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Regular
-import com.adamglin.phosphoricons.regular.ArrowsIn
 import com.adamglin.phosphoricons.regular.ArrowsOut
 import com.adamglin.phosphoricons.regular.Microphone
 import com.adamglin.phosphoricons.regular.Stop
@@ -59,6 +62,8 @@ internal fun CaptureStage(
     showBackdrop: Boolean = true,
     closeRequested: Boolean = false,
     onOpen: (() -> Unit)? = null,
+    fromLockedTile: Boolean = false,
+    onRequestMicrophone: (() -> Unit)? = null,
 ) {
     var dismissing by remember { mutableStateOf(false) }
     val closing = dismissing || closeRequested
@@ -96,10 +101,14 @@ internal fun CaptureStage(
     val overshoot = remember { OvershootInterpolator(0.75f) }
     LaunchedEffect(closing) {
         if (closing) {
-            clock.animateTo(0f, tween(260, easing = LinearEasing))
+            // Keyguard animates the return with the capture window still on screen.
+            if (!fromLockedTile) clock.animateTo(0f, tween(260, easing = LinearEasing))
             close()
         } else if (!showBackdrop) {
-            if (!view.hasWindowFocus()) withTimeoutOrNull(500L) { view.awaitCaptureFocus() }
+            if (!view.hasWindowFocus()) {
+                if (fromLockedTile) view.awaitCaptureFocus()
+                else withTimeoutOrNull(500L) { view.awaitCaptureFocus() }
+            }
             // The shade still blurs its background briefly after this window takes focus.
             delay(120L)
             revealed = true
@@ -114,6 +123,23 @@ internal fun CaptureStage(
     Box(Modifier.fillMaxSize().drawBehind {
         if (showBackdrop) drawRect(Color.Black.copy(alpha = 0.14f * captureProgress(clock.value, 0f, 60f)))
     }) {
+        if (revealed && !closing) {
+            Box(Modifier.matchParentSize().pointerInput(Unit) {
+                awaitEachGesture {
+                    val down = awaitFirstDown()
+                    down.consume()
+                    while (true) {
+                        val change = awaitPointerEvent().changes.singleOrNull() ?: break
+                        if (change.isConsumed || (change.position - down.position).getDistance() > viewConfiguration.touchSlop) break
+                        if (change.changedToUp()) {
+                            change.consume()
+                            dismissing = true
+                            break
+                        }
+                    }
+                }
+            })
+        }
         BoxWithConstraints(
             Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(bottom = 8.dp),
             contentAlignment = Alignment.BottomCenter,
@@ -130,8 +156,7 @@ internal fun CaptureStage(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Column(
-                    Modifier.widthIn(max = 520.dp).fillMaxWidth(0.924f).heightIn(max = resultLimit)
-                        .verticalScroll(rememberScrollState()),
+                    Modifier.widthIn(max = 520.dp).fillMaxWidth(0.924f).heightIn(max = resultLimit),
                     horizontalAlignment = if (result == null) Alignment.CenterHorizontally else Alignment.End,
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
@@ -139,13 +164,17 @@ internal fun CaptureStage(
                         shape = CircleShape, shadowElevation = 6.dp) {
                         Row(Modifier.heightIn(min = 48.dp).padding(horizontal = 14.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(if (resultFinished) PhosphorIcons.Regular.X else PhosphorIcons.Regular.ArrowsIn,
-                                null, Modifier.size(16.dp))
+                            if (resultFinished) {
+                                Icon(PhosphorIcons.Regular.X, null, Modifier.size(16.dp))
+                            } else {
+                                Icon(painterResource(R.drawable.ic_capture_minimize), null, Modifier.size(16.dp))
+                            }
                             Text(stringResource(if (resultFinished) R.string.action_close else R.string.capture_minimize),
                                 style = MaterialTheme.typography.labelLarge)
                         }
                     }
                     AnimatedVisibility(result != null,
+                        modifier = Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
                         enter = fadeIn(tween(180)) + slideInVertically(tween(240)) { it / 6 }) {
                         result?.let { QuickCommandResult(it) }
                     }
@@ -160,10 +189,11 @@ internal fun CaptureStage(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        val openAction = if (onOpen == null) Modifier else Modifier.clickable(
+                        val primaryAction = onRequestMicrophone ?: onOpen
+                        val openAction = if (primaryAction == null) Modifier else Modifier.clickable(
                             enabled = revealed && !closing,
-                            onClickLabel = stringResource(R.string.capture_open_note),
-                            onClick = onOpen,
+                            onClickLabel = stringResource(if (onRequestMicrophone != null) R.string.action_allow else R.string.capture_open_note),
+                            onClick = primaryAction,
                         )
                         Row(
                             Modifier.weight(1f).then(openAction).heightIn(min = 80.dp)

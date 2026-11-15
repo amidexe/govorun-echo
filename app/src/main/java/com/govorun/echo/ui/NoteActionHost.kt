@@ -15,7 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-internal fun Activity.splitNote(
+internal fun MainActivity.splitNote(
     id: String,
     playingId: () -> String?,
     player: NotePlayer,
@@ -46,7 +46,7 @@ internal fun Activity.splitNote(
     }
 }
 
-internal fun Activity.mergeNotes(ids: List<String>, scope: CoroutineScope, onDone: () -> Unit) {
+internal fun MainActivity.mergeNotes(ids: List<String>, scope: CoroutineScope, onDone: () -> Unit) {
     val activity = this
 
     confirmDialog(

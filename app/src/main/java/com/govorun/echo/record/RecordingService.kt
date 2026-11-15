@@ -15,7 +15,6 @@ import com.govorun.echo.Journal
 import com.govorun.echo.R
 import com.govorun.echo.recognition.RecognitionStatus
 import com.govorun.echo.recognition.LiveResult
-import com.govorun.echo.recognition.LiveSession
 import com.govorun.echo.recognition.NoteQueue
 import com.govorun.echo.recognition.RecognitionClient
 import com.govorun.echo.recognition.Transcriber
@@ -46,9 +45,8 @@ class RecordingService : Service() {
     private lateinit var transcriber: Transcriber
     private val finishing = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
     private lateinit var queue: NoteQueue
-    private var live: LiveSession? = null
-
-    private val speech = CaptureSpeech()
+    @Volatile private var recognition: CaptureRecognition? = null
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
     @Volatile private var appendBaseMs: Long? = null
 
     private var worker: Thread? = null
@@ -113,9 +111,9 @@ class RecordingService : Service() {
             ACTION_POSTPONE -> intent.getStringExtra(EXTRA_NOTE_ID)?.let { transcriber.postpone(it) }
             ACTION_RESUME -> resumePending()
             ACTION_IMPORT -> intent.data?.let { importFile(it, intent.getBooleanExtra(FileImport.EXTRA_SPEECH_FILTER, false)) }
-            ACTION_KEEP -> { speech.resume(); cues.clearWarning() }
+            ACTION_KEEP -> { recognition?.speech?.resume(); cues.clearWarning() }
             ACTION_PAUSE_RECORDING -> cues.pause(true)
-            ACTION_CONTINUE_RECORDING -> { speech.resume(); cues.pause(false) }
+            ACTION_CONTINUE_RECORDING -> { recognition?.speech?.resume(); cues.pause(false) }
         }
         return START_NOT_STICKY
     }
@@ -170,7 +168,8 @@ class RecordingService : Service() {
             capturePrepared(record, prepared, input, purpose)
         } catch (error: Exception) {
             Log.e(TAG, "event=microphone_start_failed", error)
-            live?.cancel()
+            recognition?.detach()?.cancel()
+            recognition = null
             mainHandler.post { worker = null; fail("microphone_unavailable") }
         } finally {
             startingLock?.takeIf { it.isHeld }?.release()
@@ -183,71 +182,15 @@ class RecordingService : Service() {
 
     private fun capturePrepared(record: AudioRecord, prepared: PreparedCapture, input: RecordingMicrophone, purpose: CapturePurpose) {
         val (noteId, dir, startedAtMs) = prepared
-        speech.reset()
         RecordingBus.liveProblem.value = null
-        liveCarry = ""
-        liveYielded = false
-        dictating = false
-        live = newLiveSession(dir, interimOnly = false)
+        val recognition = CaptureRecognition(this, dir)
+        this.recognition = recognition
+        recognition.start()
         Journal.add(this, Journal.RECORDING, getString(R.string.journal_rec_started, if (currentMode == MODE_NOTE) getString(R.string.journal_mode_note) else getString(R.string.journal_mode_long)))
         captureWakeLock = partialWakeLock("echo:capture", LONG_CAP_MS + WAKE_LOCK_SLACK_MS)
         cues.started()
-        capture(record, dir, noteId, startedAtMs, input, purpose)
+        capture(record, dir, noteId, startedAtMs, input, purpose, recognition)
     }
-
-    /** Text of the streams that fell away earlier in this recording: a restarted stream adds to it, nothing shown disappears. */
-    @Volatile private var liveCarry = ""
-
-    /** The text stream was let go because another app took the microphone; it comes back when the microphone does. */
-    @Volatile private var liveYielded = false
-
-    /** The person dictates with Govorun's bird right now (Govorun said so); the note pauses meanwhile if the setting allows. */
-    @Volatile private var dictating = false
-    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
-
-    /**
-     * Another app took the microphone (a call, a voice message, a stream in DayPlan): this recording now gets silence, so its text
-     * stream only keeps Govorun busy. It is closed to let the other app recognize, even with a Govorun that serves one session.
-     */
-    private fun yieldLive() {
-        val session = live ?: return
-        if (session.failed) return
-        liveCarry = listOf(liveCarry, session.textSoFar()).filter { it.isNotBlank() }.joinToString(" ")
-        live = null
-        liveYielded = true
-        session.cancel()
-        RecordingBus.liveProblem.value = null
-        Journal.add(this, Journal.RECOGNITION, getString(R.string.journal_live_yielded))
-    }
-
-    /** The microphone is back: the text stream starts again and goes on from what was already shown. */
-    private fun takeLiveBack(dir: File) {
-        if (!liveYielded || worker == null) return
-        liveYielded = false
-        live = newLiveSession(dir, interimOnly = true, carry = liveCarry)
-    }
-
-    private fun newLiveSession(
-        dir: File,
-        interimOnly: Boolean,
-        carry: String = "",
-    ) = LiveSession(
-        this,
-        onText = { NoteStore.writeLiveText(dir, listOf(carry, it).filter { part -> part.isNotBlank() }.joinToString(" ")); RecordingBus.liveTextArrived() },
-        onSpeech = speech::changed,
-        onFailed = { reason ->
-            // A stream that ended can no longer say when the dictation is over: the note never stays paused because of it.
-            dictating = false
-            RecordingBus.liveProblem.value = reason
-        },
-        onDictation = { active -> dictating = active },
-        onReady = {
-            speech.ready()
-            if (RecordingBus.liveProblem.value != null && interimOnly) Journal.add(this, Journal.RECOGNITION, getString(R.string.journal_live_back))
-            RecordingBus.liveProblem.value = null
-        },
-        interimOnly = interimOnly,
-    ).also { it.start() }
 
     private fun capture(
         record: AudioRecord,
@@ -256,6 +199,7 @@ class RecordingService : Service() {
         startedAtMs: Long,
         input: RecordingMicrophone,
         purpose: CapturePurpose,
+        recognition: CaptureRecognition,
     ) {
         val active = RecordingState.Recording(noteId, currentMode, startedAtMs, purpose)
         RecordingBus.state.value = active
@@ -267,17 +211,17 @@ class RecordingService : Service() {
                 dir = dir,
                 mode = { currentMode },
                 capMs = { capMs },
-                stopRequested = { stopReason ?: speech.commandStop(purpose, live, dictating) },
+                stopRequested = { stopReason ?: recognition.speech.commandStop(purpose, recognition.session, recognition.dictating) },
                 environment = { recordingEnvironment(this) },
-                idleMs = { speech.idleMs(live) },
-                feed = { buffer, length -> live?.feed(buffer, length) },
+                idleMs = { recognition.speech.idleMs(recognition.session) },
+                feed = { buffer, length -> recognition.session?.feed(buffer, length) },
                 onRoute = { type -> Journal.add(this, Journal.RECORDING, getString(R.string.journal_route, Microphone.routeName(this, type))) },
                 reopen = { input.open(BUFFER_BYTES) { stopReason != null } },
                 acceptsInput = input::accepts,
                 onMicRecovered = { Journal.add(this, Journal.RECORDING, getString(R.string.journal_mic_recovered)) },
                 archive = archive,
-                onSilenced = { now -> mainHandler.post { if (now) yieldLive() else takeLiveBack(dir) } },
-                paused = { dictating || RecordingBus.pausedAt.value != null },
+                onSilenced = { now -> mainHandler.post { recognition.microphoneSilenced(now) } },
+                paused = { recognition.dictating || RecordingBus.pausedAt.value != null },
             ).run(callbackExecutor)
         input.close()
         finish(dir, noteId, startedAtMs, result, archive, purpose)
@@ -294,8 +238,8 @@ class RecordingService : Service() {
         val durationMs = NoteStore.durationMs(result.bytes)
         captureWakeLock?.takeIf { it.isHeld }?.release()
         captureWakeLock = null
-        val session = live
-        live = null
+        val session = recognition?.detach()
+        recognition = null
         val base = appendBaseMs
         appendBaseMs = null
         val cancelled = result.stopReason == STOP_CANCEL
@@ -411,7 +355,7 @@ class RecordingService : Service() {
     override fun onDestroy() {
         stopReason = stopReason ?: STOP_USER
         inputSession?.close()
-        live?.cancel()
+        recognition?.detach()?.cancel()
         scope.cancel()
         callbackExecutor.shutdown()
         captureWakeLock?.takeIf { it.isHeld }?.release()
@@ -429,7 +373,11 @@ class RecordingService : Service() {
     private fun notification(title: String = getString(R.string.recording_title), recording: Boolean): Notification =
         RecordingNotification.build(this, title, recording, startedAtWall, recording && cues.warning)
 
-    private val cues by lazy { RecordingCues(this, { speech.idleMs(live) }) { RecordingNotification.refresh(this, notification(recording = true)) } }
+    private val cues by lazy {
+        RecordingCues(this, { recognition?.let { it.speech.idleMs(it.session) } ?: 0L }) {
+            RecordingNotification.refresh(this, notification(recording = true))
+        }
+    }
 
     companion object {
         const val ACTION_START = "com.govorun.echo.START"

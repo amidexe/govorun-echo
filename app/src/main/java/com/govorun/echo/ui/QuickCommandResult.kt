@@ -30,7 +30,8 @@ internal fun QuickCommandResult(result: CaptureResult) {
         else -> PhosphorIcons.Regular.Calendar to R.string.commands_preset_calendar
     }
     val context = LocalContext.current
-    val hasPreview = result.ok && (result.title.isNotBlank() || result.detail.isNotBlank())
+    val hasPreview = (result.ok || (result.finished && result.kind == "yandex")) &&
+        (result.title.isNotBlank() || result.detail.isNotBlank())
     Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(36.dp), shadowElevation = 12.dp) {
         Column(Modifier.background(captureSurfaceBrush()).padding(horizontal = 8.dp)) {
             Text(result.label, Modifier.padding(horizontal = 8.dp, vertical = 16.dp),

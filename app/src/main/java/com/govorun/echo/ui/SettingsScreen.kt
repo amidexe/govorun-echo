@@ -279,6 +279,7 @@ internal fun SettingsScreen(
                                 onClick = actions.onOpenExperiments)
                         }
                         SettingsLinkRow(PhosphorIcons.Regular.Info, stringResource(R.string.about_title),
+                            value = appVersionLabel,
                             onClick = actions.onOpenAbout)
                     }
                 }

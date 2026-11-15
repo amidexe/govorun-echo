@@ -19,6 +19,7 @@ internal class NotesActions(
      */
     val trashCount: Int,
     val onToggleSearch: () -> Unit,
+    val takeSearchFocusRequest: () -> Boolean,
     val onTab: (NotesTab) -> Unit,
     val onQueryChange: (String) -> Unit,
     val onOpenFilters: () -> Unit,

@@ -129,7 +129,9 @@ class VolumeKeyEntry : ComponentActivity() {
         val label = when (phase) {
             Phase.Recording -> stringResource(R.string.capture_quick_speak)
             Phase.Saving -> result?.label ?: stringResource(R.string.volume_key_saving)
-            Phase.Saved -> if (commandResult != null) stringResource(R.string.capture_done) else result?.label.orEmpty()
+            Phase.Saved -> if (commandResult != null) {
+                stringResource(if (commandResult.ok) R.string.capture_done else R.string.commands_result_title)
+            } else result?.label.orEmpty()
         }
         val open = if (!openingNote && phase == Phase.Recording && recording?.purpose == CapturePurpose.QUICK) {
             {

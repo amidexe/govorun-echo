@@ -29,7 +29,7 @@ import com.product.ui.SettingsLinkRow
 import com.product.ui.SettingsSection
 import com.product.ui.productScreenPadding
 
-private val appVersionLabel =
+internal val appVersionLabel =
     "${BuildConfig.VERSION_NAME.removeSuffix("-debug")} (${BuildConfig.VERSION_CODE})"
 
 @Composable
