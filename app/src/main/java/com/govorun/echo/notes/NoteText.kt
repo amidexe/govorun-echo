@@ -60,13 +60,13 @@ object NoteText {
         return true
     }
 
-    /** A new text note not yet kept or let go: shared in or typed a moment ago, it asks «Сохранить» or «Не сохранять». */
+    /** A new text note whose first editing session is still open. */
     fun isDraft(
         root: File,
         id: String,
     ): Boolean = runCatching { JSONObject(File(root, "$id/meta.json").readText()).optBoolean("draft") }.getOrDefault(false)
 
-    /** Keeps a new text note for good; leaving it without a choice keeps it too, so no typed or shared text is lost. */
+    /** Closes the first editing session of a text note. */
     @Synchronized
     fun keep(
         root: File,
@@ -75,23 +75,21 @@ object NoteText {
         if (isDraft(root, id)) NoteStore.updateMeta(File(root, id)) { remove("draft") }
     }
 
-    /** «Не сохранять»: a text shared in by mistake goes without a trace, not to the trash. */
+    /** Removes a new note after its editor has flushed every field, if it carries no content. */
     @Synchronized
-    fun discard(
-        root: File,
-        id: String,
-    ) {
-        if (isDraft(root, id)) File(root, id).deleteRecursively()
-    }
-
-    /** A new text note left empty: it goes without a trace, not to the trash. */
     fun dropIfEmpty(
         root: File,
         id: String,
     ): Boolean {
         val dir = File(root, id)
         val meta = runCatching { JSONObject(File(dir, "meta.json").readText()) }.getOrNull() ?: return false
-        if (!meta.optBoolean("draft") || meta.optString("mode") != MODE || runCatching { File(dir, "text.txt").readText() }.getOrDefault("").isNotBlank() || meta.has("fair")) return false
+        if (!meta.optBoolean("draft") || meta.optString("mode") != MODE) return false
+        if (meta.optString("title").isNotBlank() || meta.optString("about").isNotBlank() ||
+            (meta.optJSONArray("tags")?.length() ?: 0) > 0 || meta.has("fair") || meta.has("typedTextPending")
+        ) return false
+        if (dir.list()?.all { it == "meta.json" || it == "text.txt" } != true) return false
+        val text = runCatching { File(dir, "text.txt").readText() }.getOrNull() ?: return false
+        if (text.isNotBlank()) return false
         return dir.deleteRecursively()
     }
 

@@ -18,16 +18,19 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -57,6 +60,18 @@ internal fun NoteTextCard(
         (@Composable androidx.compose.foundation.layout.RowScope.() -> Unit) -> Unit)? =
         null,
 ) {
+    if (textDraft) {
+        val context = LocalContext.current
+        val changed by rememberUpdatedState(actions.onChanged)
+        // The card's effect is disposed after its fields have flushed the last edits.
+        DisposableEffect(note.id) {
+            onDispose {
+                val root = NoteStore.root(context)
+                if (!NoteText.dropIfEmpty(root, note.id)) NoteText.keep(root, note.id)
+                changed()
+            }
+        }
+    }
     val scroll = rememberScrollState()
     // While the note plays the text follows the spoken word; a finger scrolling away to read ahead
     // stops that until «К звуку».

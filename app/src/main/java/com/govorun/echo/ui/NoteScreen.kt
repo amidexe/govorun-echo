@@ -260,18 +260,6 @@ private fun NoteScreenContent(
                         actions.edits.share(note.id, spans()) { busy = false }
                     },
                 )
-            } else if (textDraft) {
-                TextDraftBar(
-                    onDiscard = {
-                        NoteText.discard(NoteStore.root(context), note.id)
-                        actions.onChanged()
-                        onBack()
-                    },
-                    onSave = {
-                        NoteText.keep(NoteStore.root(context), note.id)
-                        onBack()
-                    },
-                )
             }
         },
         snackbarHost = {

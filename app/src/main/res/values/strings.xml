@@ -478,8 +478,6 @@
     <string name="lock_text">Заметки откроются по отпечатку или коду экрана</string>
     <string name="lock_open">Открыть</string>
     <string name="lock_failed">Android не открыл окно отпечатка. Вход оставлен без защиты</string>
-    <string name="text_save">Сохранить</string>
-    <string name="text_discard">Не сохранять</string>
     <string name="text_undo">Отменить</string>
     <string name="text_redo">Повторить</string>
     <string name="text_hint">Текст заметки</string>
