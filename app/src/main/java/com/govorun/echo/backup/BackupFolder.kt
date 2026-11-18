@@ -12,6 +12,7 @@ import com.govorun.echo.export.Exporter
 import com.govorun.echo.export.ExportItem
 import com.govorun.echo.export.NoteMarkdown
 import com.govorun.echo.notes.NoteStore
+import com.govorun.echo.notes.NoteTrash
 import org.json.JSONObject
 import java.io.File
 import java.util.concurrent.Executors
@@ -156,6 +157,7 @@ object BackupFolder {
         fileName.matchEntire(name)?.let { it.groupValues[1] to ((it.groupValues[2].toIntOrNull() ?: 0) to it.groupValues[3]) }
 
     /** Brings back the notes of the folder that this phone does not have (matched by the date in the file name). Returns how many. */
+    @Synchronized
     fun restore(context: Context): Int {
         val tree = treeUri(context) ?: return 0
         return NetworkPolicy.withFolderAccess(tree.authority) { checkAccess -> restore(context, tree, checkAccess) }
@@ -182,36 +184,40 @@ object BackupFolder {
         Log.i(TAG, "event=restore files=${files.size} details=${details?.notes?.size ?: -1}")
         // The tags' colours and order come back to a phone that has none of its own yet.
         details?.tags?.let { if (AppSettings.tags(context).isEmpty()) AppSettings.restoreTags(context, it) }
-        val haveIds =
-            planNames(
-                NoteStore
-                    .root(context)
-                    .listFiles { f -> f.isDirectory }
-                    .orEmpty()
-                    .mapNotNull { dir -> readMeta(dir)?.takeIf { it.optString("state") == NoteStore.STATE_DONE }?.let { dir.name to it.optLong("startedAtMs") } }
-                    .sortedWith(compareBy({ it.second }, { it.first })),
-            )
-        val have = haveIds.map { (id, base) -> readMeta(File(NoteStore.root(context), id))?.optJSONObject("backup")?.optString("base")?.takeIf { it.isNotBlank() } ?: details?.notes?.entries?.firstOrNull { it.value.optString("id") == id }?.key ?: base }.toSet()
+        val localRoot = NoteStore.root(context)
+        val folderIds = details?.notes.orEmpty().mapValues { (_, meta) -> meta.optString("id") }
+        val trash = NoteTrash.root(context)
+        val (haveIds, inTrash) = synchronized(NoteStore) {
+            val finished = localRoot.listFiles { it.isDirectory }.orEmpty()
+                .mapNotNull { dir -> readMeta(dir)?.takeIf { it.optString("state") == NoteStore.STATE_DONE }?.let { dir.name to it } }
+                .sortedWith(compareBy({ it.second.optLong("startedAtMs") }, { it.first }))
+            val trashed = trash.listFiles { it.isDirectory }.orEmpty().associate { dir -> dir.name to (readMeta(dir) ?: JSONObject()) }
+            val planned = planNames(finished.map { (id, meta) -> id to meta.optLong("startedAtMs") })
+            // A matching record in the trash still exists. Only the trash's Restore action brings it back.
+            matchRestoredCopies(finished.toMap() + trashed, planned, tree.toString(), folderIds, files.keys) to trashed.keys
+        }
+        val have = haveIds.values.toSet()
         // The notes the phone already has take from the folder what they lack: the sound of a note that came back from Google's
         // backup as text only, and the tags and names of a note restored before the folder carried them.
         var restored = 0
         haveIds.forEach { (id, base) ->
-            val dir = File(NoteStore.root(context), id)
+            if (id in inTrash) return@forEach
+            val dir = File(localRoot, id)
             val meta = readMeta(dir) ?: return@forEach
-            var changed = false
             val sounds = files[base].orEmpty().filter { it.ext != "txt" }
             if (NoteStore.audioParts(meta).isEmpty() && meta.optString("mode") != com.govorun.echo.notes.NoteText.MODE && sounds.isNotEmpty()) {
                 checkAccess()
-                runCatching { bringSound(resolver, tree, sounds, dir, meta, checkAccess) }
-                    .onSuccess { changed = true; restored++ }
+                runCatching { FolderRestoreAudio.restoreMissingSound(context, tree, sounds, dir, checkAccess) }
+                    .onSuccess { if (it) restored++ }
                     .onFailure { if (it is NetworkGate.Refused) throw it; Log.w(TAG, "event=sound_restore_failed note=$base", it) }
             }
             val kept = details?.notes?.get(base)
-            if (kept != null && meta.optString("mode") == "restored" && !meta.has("tags") && !meta.has("title")) {
-                FolderDetails.apply(meta, kept)
-                changed = true
+            if (kept != null) synchronized(NoteStore) {
+                val latest = readMeta(dir) ?: return@synchronized
+                if (latest.optString("mode") == "restored" && !latest.has("tags") && !latest.has("title")) {
+                    NoteStore.writeMeta(dir, FolderDetails.apply(latest, kept))
+                }
             }
-            if (changed) NoteStore.writeMeta(dir, meta)
         }
         for ((base, list) in files.toSortedMap()) {
             if (base in have) continue
@@ -228,7 +234,7 @@ object BackupFolder {
                         .put("durationMs", 0L)
                         .put("bytes", 0)
                         .put("state", NoteStore.STATE_DONE)
-                bringSound(resolver, tree, list.filter { it.ext != "txt" }, dir, meta, checkAccess)
+                FolderRestoreAudio.bringSound(resolver, tree, list.filter { it.ext != "txt" }, dir, meta, checkAccess)
                 details?.notes?.get(base)?.let { FolderDetails.apply(meta, it) }
                 meta.put("backup", JSONObject().put("tree", tree.toString()).put("base", base).put("sig", signature(meta, textLength(dir))))
                 NoteStore.writeMeta(dir, meta)
@@ -242,45 +248,37 @@ object BackupFolder {
         return restored
     }
 
-    /** The folder's sound files of a note into its `chunks/`, and into its [meta] their names and length. */
-    private fun bringSound(
-        resolver: android.content.ContentResolver,
-        tree: Uri,
-        sounds: List<FolderFile>,
-        dir: File,
-        meta: JSONObject,
-        checkAccess: () -> Unit,
-    ) {
-        if (sounds.isEmpty()) return
-        val audio = JSONObject()
-        var durationMs = 0L
-        sounds.sortedBy { it.part }.forEachIndexed { index, f ->
-            checkAccess()
-            val name = "%03d.%s".format(index, f.ext)
-            val target = File(dir, "chunks/$name").apply { parentFile?.mkdirs() }
-            resolver.openInputStream(DocumentsContract.buildDocumentUriUsingTree(tree, f.id))?.use { input -> target.outputStream().use { input.copyTo(it) } } ?: error("open_failed")
-            val ms = audioLength(target)
-            audio.put(name, ms)
-            durationMs += ms
+    /** Resolve explicit identities first, then match older folders without identifiers by name. */
+    internal fun matchRestoredCopies(
+        finished: Map<String, JSONObject>,
+        planned: Map<String, String>,
+        tree: String,
+        folderIds: Map<String, String>,
+        available: Set<String>,
+    ): Map<String, String> {
+        val manifestNames = folderIds.entries.asSequence()
+            .filter { (base, id) -> base in available && id.isNotBlank() }
+            .associate { (base, id) -> id to base }
+        val matches = mutableMapOf<String, String>()
+        val claimed = mutableSetOf<String>()
+        for ((id, meta) in finished) {
+            val receiptName = meta.optJSONObject("backup")
+                ?.takeIf { it.optString("tree") == tree }?.optString("base")
+            val base = receiptName?.takeIf { it in available && it !in claimed } ?: manifestNames[id]
+            if (base != null && claimed.add(base)) matches[id] = base
         }
-        meta.put("audio", audio).put("durationMs", maxOf(durationMs, meta.optLong("durationMs")))
+        for ((id, base) in planned) {
+            if (id !in matches && base in available && folderIds[base].isNullOrBlank() && claimed.add(base)) {
+                matches[id] = base
+            }
+        }
+        return matches
     }
 
     private fun restoredStart(base: String): Long? =
         runCatching {
             java.time.LocalDateTime.parse(base.take(16), baseTime).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli() + base.drop(16).removePrefix("-").toIntOrNull().let { (it ?: 1) - 1 } * 1_000L
         }.getOrNull()
-
-    private fun audioLength(file: File): Long =
-        runCatching {
-            val retriever = android.media.MediaMetadataRetriever()
-            try {
-                retriever.setDataSource(file.path)
-                retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLong() ?: 0L
-            } finally {
-                retriever.release()
-            }
-        }.getOrDefault(0L)
 
     /** One pass over all notes; returns when everything copyable is copied or the first hard error hit. */
     private fun sync(context: Context, tree: Uri, checkAccess: () -> Unit) {

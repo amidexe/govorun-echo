@@ -67,6 +67,7 @@ object NoteText {
     ): Boolean = runCatching { JSONObject(File(root, "$id/meta.json").readText()).optBoolean("draft") }.getOrDefault(false)
 
     /** Keeps a new text note for good; leaving it without a choice keeps it too, so no typed or shared text is lost. */
+    @Synchronized
     fun keep(
         root: File,
         id: String,
@@ -75,6 +76,7 @@ object NoteText {
     }
 
     /** «Не сохранять»: a text shared in by mistake goes without a trace, not to the trash. */
+    @Synchronized
     fun discard(
         root: File,
         id: String,

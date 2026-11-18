@@ -90,6 +90,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        com.govorun.echo.export.ExportCache.cleanAsync(this)
         resumes++
         backupHost.run()
         housekeepOnResume()

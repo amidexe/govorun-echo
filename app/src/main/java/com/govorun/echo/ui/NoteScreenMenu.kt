@@ -47,7 +47,7 @@ internal fun NoteScreenMenu(
                 ?.let { { fairState.restore(context, note, actions.onChanged) } },
         onItogi =
             if (
-                com.govorun.echo.smart.SmartItogi.fits(context, note) || itogiState.of(note) != null
+                !itogiState.tab(context, note) && com.govorun.echo.smart.SmartItogi.fits(context, note)
             )
                 ({
                     fairState.shown = false

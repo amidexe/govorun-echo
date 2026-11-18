@@ -170,7 +170,7 @@ internal fun FragmentTextCard(
                     start = 16.dp,
                     end = 16.dp,
                     top = 16.dp,
-                    bottom = DOCK_CLEARANCE,
+                    bottom = 16.dp,
                 ),
         )
     }

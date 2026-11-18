@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.BasicTextField
@@ -92,8 +91,9 @@ internal fun RowScope.EditingActions(showCancel: Boolean = true, enabled: Boolea
     IconButton(onClick = { if (field.undoState.canUndo) field.undoState.undo() else preview?.undoPreview() }, enabled = enabled && (field.undoState.canUndo || preview?.canUndoPreview == true)) { Icon(PhosphorIcons.Regular.ArrowCounterClockwise, contentDescription = stringResource(R.string.text_undo), modifier = size) }
     IconButton(onClick = { if (field.undoState.canRedo) field.undoState.redo() else preview?.redoPreview() }, enabled = enabled && (field.undoState.canRedo || preview?.canRedoPreview == true)) { Icon(PhosphorIcons.Regular.ArrowClockwise, contentDescription = stringResource(R.string.text_redo), modifier = size) }
     TextEditing.cancel()?.takeIf { showCancel }?.let { cancel -> IconButton(onClick = cancel) { Icon(PhosphorIcons.Regular.X, contentDescription = stringResource(R.string.fair_cancel), modifier = size) } }
-    IconButton(enabled = enabled, onClick = { TextEditing.save()?.invoke() ?: focus.clearFocus() }) {
-        Icon(PhosphorIcons.Regular.Check, contentDescription = stringResource(R.string.fair_save), tint = MaterialTheme.colorScheme.primary, modifier = size)
+    val save = TextEditing.save()
+    IconButton(enabled = enabled, onClick = { save?.invoke() ?: focus.clearFocus() }) {
+        Icon(PhosphorIcons.Regular.Check, contentDescription = stringResource(if (save == null) R.string.action_done else R.string.fair_save), tint = MaterialTheme.colorScheme.primary, modifier = size)
     }
 }
 
@@ -156,16 +156,17 @@ internal fun TextFieldState.load(text: String) {
 /** The two choices of a new text note, shared in or just typed: let it go, or keep it. */
 @Composable
 internal fun TextDraftBar(
-    modifier: Modifier = Modifier,
     onDiscard: () -> Unit,
     onSave: () -> Unit,
 ) {
-    Row(
-        modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        OutlinedButton(onClick = onDiscard, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.text_discard)) }
-        Button(onClick = onSave, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.text_save)) }
+    NoteActionBar {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            OutlinedButton(onClick = onDiscard, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.text_discard)) }
+            Button(onClick = onSave, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.text_save)) }
+        }
     }
 }
 

@@ -123,7 +123,15 @@ internal object ArchiveRestore {
                         }
                     }
                     RestoreTransaction.prepare(unit.incoming)
-                    atomic {check(fastStamp(File(target,unit.relative))==stamp){"target_changed"};RestoreTransaction.install(target,unit.relative,unit.incoming,work)}
+                    atomic {
+                        check(fastStamp(File(target,unit.relative))==stamp) { "target_changed" }
+                        if (unit.isNote) {
+                            val otherRoot = if (unit.relative.startsWith("notes/")) "trash" else "notes"
+                            val other = File(target, "$otherRoot/${unit.relative.substringAfter('/')}")
+                            check(!java.nio.file.Files.exists(other.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS)) { "target_moved" }
+                        }
+                        RestoreTransaction.install(target,unit.relative,unit.incoming,work)
+                    }
                     if(unit.isNote) {if(unit.kind==Kind.New) added++ else enriched++}
                 } catch(e:Exception) {
                     RestoreTransaction.recover(target,work); problems+="restore_failed:${unit.relative}"; damaged++

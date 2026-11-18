@@ -49,12 +49,12 @@ object NoteStore {
         dir: File,
         meta: JSONObject,
         touched: Boolean = true,
+        durable: Boolean = false,
     ) {
         meta.put("format", FORMAT)
         if (touched) meta.put("changedAtMs", System.currentTimeMillis())
-        val tmp = File(dir, "meta.json.tmp")
-        tmp.writeText(meta.toString())
-        check(tmp.renameTo(File(dir, "meta.json"))) { "meta rename failed" }; if (touched) NoteChanges.signal()
+        com.govorun.echo.UserFiles.replaceText(File(dir, "meta.json"), meta.toString(), durable)
+        if (touched) NoteChanges.signal()
     }
 
     @Synchronized

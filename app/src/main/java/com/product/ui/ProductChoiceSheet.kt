@@ -2,12 +2,15 @@ package com.product.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
@@ -15,6 +18,7 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -29,10 +33,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.min
 
 @Composable
 fun <T> ProductChoiceSheet(
@@ -72,22 +79,39 @@ fun <T> ProductChoiceSheet(
 internal fun ProductSheet(
     title: String,
     onDismissRequest: () -> Unit,
+    sheetGesturesEnabled: Boolean = true,
     content: @Composable () -> Unit,
 ) {
-    ProductModalSheet(onDismissRequest) {
-        Column(
-            modifier = Modifier.fillMaxWidth().heightIn(max = 640.dp)
-                .verticalScroll(rememberScrollState())
-                .padding(
-                    start = ProductTokens.Spacing.Section,
-                    end = ProductTokens.Spacing.Section,
-                    bottom = ProductTokens.Spacing.Screen,
-                ),
-            verticalArrangement = Arrangement.spacedBy(ProductTokens.Spacing.Xxl),
-        ) {
-            ProductSheetTitle(title)
-            content()
+    ProductModalSheet(onDismissRequest, sheetGesturesEnabled = sheetGesturesEnabled) {
+        if (sheetGesturesEnabled) {
+            ProductSheetContents(title, 640.dp, content)
+        } else {
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                // The dialog provides the bottom inset. Leave room for the status bar so it
+                // cannot change the height of the sheet as it approaches the top of the window.
+                val density = LocalDensity.current
+                val topInset = WindowInsets.safeDrawing.getTop(density)
+                val topSpace = with(density) { topInset.toDp() } + ProductTokens.Spacing.Sm
+                ProductSheetContents(title, min(640.dp, (maxHeight - topSpace).coerceAtLeast(0.dp)), content)
+            }
         }
+    }
+}
+
+@Composable
+private fun ProductSheetContents(title: String, maxHeight: Dp, content: @Composable () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxWidth().heightIn(max = maxHeight)
+            .verticalScroll(rememberScrollState())
+            .padding(
+                start = ProductTokens.Spacing.Section,
+                end = ProductTokens.Spacing.Section,
+                bottom = ProductTokens.Spacing.Screen,
+            ),
+        verticalArrangement = Arrangement.spacedBy(ProductTokens.Spacing.Xxl),
+    ) {
+        ProductSheetTitle(title)
+        content()
     }
 }
 
@@ -107,12 +131,16 @@ internal fun ProductModalSheet(
     onDismissRequest: () -> Unit,
     sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     properties: ModalBottomSheetProperties = ModalBottomSheetProperties(),
+    sheetGesturesEnabled: Boolean = true,
+    showDragHandle: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
         sheetState = sheetState,
         properties = properties,
+        sheetGesturesEnabled = sheetGesturesEnabled,
+        dragHandle = if (showDragHandle) ({ BottomSheetDefaults.DragHandle() }) else null,
         containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         shape = RoundedCornerShape(topStart = ProductTokens.Radius.Sheet, topEnd = ProductTokens.Radius.Sheet),
         content = content,

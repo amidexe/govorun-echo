@@ -205,12 +205,15 @@ internal class FragmentHost(
                 withContext(Dispatchers.IO) {
                     runCatching {
                         val dir = NoteStore.noteDir(activity, id)
-                        // Only what is handed to another app lies in cache/exports; the note's own files never leave its folder.
-                        val exports = File(activity.cacheDir, "exports").apply { mkdirs() }
-                        exports.listFiles().orEmpty().forEach { it.deleteRecursively() }
-                        val name = nameFormat.format(Instant.ofEpochMilli(NoteCut.saidAt(dir, spans.first().fromMs.toLong())))
-                        val file = CutSound.soundFile(dir, spans, File(exports, "$name.ogg")) ?: error("no_sound")
-                        file to NoteCut.textOf(dir, spans)
+                        val exports = com.govorun.echo.export.ExportCache.create(activity)
+                        var ready = false
+                        try {
+                            val name = nameFormat.format(Instant.ofEpochMilli(NoteCut.saidAt(dir, spans.first().fromMs.toLong())))
+                            val file = CutSound.soundFile(dir, spans, File(exports, "$name.ogg")) ?: error("no_sound")
+                            (file to NoteCut.textOf(dir, spans)).also { ready = true }
+                        } finally {
+                            com.govorun.echo.export.ExportCache.finish(exports, handedOff = ready)
+                        }
                     }.getOrNull()
                 }
             done()

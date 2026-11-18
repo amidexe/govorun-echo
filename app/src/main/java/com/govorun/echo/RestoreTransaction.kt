@@ -1,6 +1,7 @@
 package com.govorun.echo
 
 import org.json.JSONObject
+import com.govorun.echo.UserFiles.syncDirectory
 import java.io.File
 import java.util.UUID
 
@@ -27,9 +28,6 @@ internal object RestoreTransaction {
         if(!target.exists() && old.exists()) {target.parentFile?.mkdirs();check(old.renameTo(target)) {"rollback_failed"}}
         check(target.exists()) {"recovery_target_missing"}
         tx.deleteRecursively()
-    }
-    private fun syncDirectory(directory:File) {
-        java.nio.channels.FileChannel.open(directory.toPath(),java.nio.file.StandardOpenOption.READ).use {it.force(true)}
     }
     fun prepare(source:File) {
         if(source.isFile) java.io.RandomAccessFile(source,"r").use{it.fd.sync()}

@@ -4,9 +4,10 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -187,7 +188,10 @@ private fun NoteScreenContent(
                 notePlayer.placeAt(note.id, NoteStore.noteDir(context, note.id), note.audio, at.ms)
         }
     }
+    val textOnly = note.audio.isEmpty() && note.state == NoteStore.STATE_DONE
+    val textDraft = textOnly && remember(note.id) { NoteText.isDraft(NoteStore.root(context), note.id) }
     Scaffold(
+        modifier = Modifier.imePadding(),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             NoteTopBar(
@@ -222,8 +226,67 @@ private fun NoteScreenContent(
                 onMenu = { menuOpen = true },
             )
         },
+        bottomBar = {
+            if (current != null) {
+                val whole = pick.startMs <= 0L && pick.endMs >= current.totalMs
+                val spans = { current.source(pick.startMs, pick.endMs) }
+                FragmentActions(
+                    canEdit = canEdit,
+                    hasPiece = pick.lengthMs > 0,
+                    wholeNote = whole,
+                    busy = busy,
+                    onSeparate = {
+                        busy = true
+                        actions.edits.separate(note.id, spans()) { busy = false }
+                    },
+                    onCut = {
+                        val next = current.cut(pick.startMs, pick.endMs)
+                        if (next !== current) {
+                            stepPicks = stepPicks + pick
+                            draft = next
+                            choose(FragmentSelection(pick.startMs, pick.startMs), false)
+                        }
+                    },
+                    onKeep = {
+                        val next = current.keepOnly(pick.startMs, pick.endMs)
+                        if (next !== current) {
+                            stepPicks = stepPicks + pick
+                            draft = next
+                            choose(FragmentSelection(0L, 0L), false)
+                        }
+                    },
+                    onShare = {
+                        busy = true
+                        actions.edits.share(note.id, spans()) { busy = false }
+                    },
+                )
+            } else if (textDraft) {
+                TextDraftBar(
+                    onDiscard = {
+                        NoteText.discard(NoteStore.root(context), note.id)
+                        actions.onChanged()
+                        onBack()
+                    },
+                    onSave = {
+                        NoteText.keep(NoteStore.root(context), note.id)
+                        onBack()
+                    },
+                )
+            }
+        },
+        snackbarHost = {
+            androidx.compose.material3.SnackbarHost(snackbar) { data ->
+                androidx.compose.material3.Snackbar(
+                    data,
+                    shape = RoundedCornerShape(ProductTokens.Radius.Card),
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                    actionColor = MaterialTheme.colorScheme.primary,
+                )
+            }
+        },
     ) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding)) {
+        Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)) {
             // Inside a finished note the microphone continues that note; elsewhere it starts a new
             // one.
             // The big button continues this note, also in the second after a stop while its text is
@@ -369,29 +432,13 @@ private fun NoteScreenContent(
                                 .padding(start = 12.dp, end = 12.dp, top = 8.dp),
                             onTags = { tagging = true },
                             wordsRead = wordsRead,
+                            textDraft = textDraft,
                             find = shownFind,
                             fairState = fairState,
                             tabs = tabs,
                         )
                 }
             }
-            // A note of text only records nothing: its own new note asks to be kept or let go
-            // instead of a «+» that would record.
-            val textOnly = note.audio.isEmpty() && note.state == NoteStore.STATE_DONE
-            if (
-                textOnly && remember(note.id) { NoteText.isDraft(NoteStore.root(context), note.id) }
-            )
-                TextDraftBar(
-                    Modifier.align(Alignment.BottomCenter),
-                    onDiscard = {
-                        NoteText.discard(NoteStore.root(context), note.id)
-                        actions.onChanged()
-                        onBack()
-                    },
-                ) {
-                    NoteText.keep(NoteStore.root(context), note.id)
-                    onBack()
-                }
             if (!showsPlayer && !textOnly)
                 RecordButton(
                     recording,
@@ -402,55 +449,6 @@ private fun NoteScreenContent(
                     recordLabel =
                         if (appendable) R.string.action_append else R.string.action_new_recording,
                 )
-            if (current != null) {
-                val whole = pick.startMs <= 0L && pick.endMs >= current.totalMs
-                val spans = { current.source(pick.startMs, pick.endMs) }
-                FragmentActions(
-                    canEdit = canEdit,
-                    hasPiece = pick.lengthMs > 0,
-                    wholeNote = whole,
-                    busy = busy,
-                    onSeparate = {
-                        busy = true
-                        actions.edits.separate(note.id, spans()) { busy = false }
-                    },
-                    onCut = {
-                        val next = current.cut(pick.startMs, pick.endMs)
-                        if (next !== current) {
-                            stepPicks = stepPicks + pick
-                            draft = next
-                            choose(FragmentSelection(pick.startMs, pick.startMs), false)
-                        }
-                    },
-                    onKeep = {
-                        val next = current.keepOnly(pick.startMs, pick.endMs)
-                        if (next !== current) {
-                            stepPicks = stepPicks + pick
-                            draft = next
-                            choose(FragmentSelection(0L, 0L), false)
-                        }
-                    },
-                    onShare = {
-                        busy = true
-                        actions.edits.share(note.id, spans()) { busy = false }
-                    },
-                    modifier = Modifier.align(Alignment.BottomCenter),
-                )
-            }
-            androidx.compose.material3.SnackbarHost(
-                snackbar,
-                Modifier.align(Alignment.BottomCenter)
-                    .navigationBarsPadding()
-                    .padding(bottom = if (current != null) 88.dp else 16.dp),
-            ) { data ->
-                androidx.compose.material3.Snackbar(
-                    data,
-                    shape = RoundedCornerShape(ProductTokens.Radius.Card),
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                    contentColor = MaterialTheme.colorScheme.onSurface,
-                    actionColor = MaterialTheme.colorScheme.primary,
-                )
-            }
         }
     }
     if (leaving) {

@@ -2,7 +2,6 @@ package com.govorun.echo.ui
 
 import androidx.compose.material3.RadioButton
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -16,9 +15,11 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -42,6 +43,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -152,12 +154,16 @@ internal fun ShelfFrame(
     val focus = LocalFocusManager.current
     val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
+    var keyboardVisible by remember { mutableStateOf(false) }
     ProductModalSheet(
         onDismissRequest = onDismiss,
         sheetState = state,
+        showDragHandle = !keyboardVisible,
         // Back is the sheet's own: the window's properties are read once, while what Back does changes as tags are chosen.
         properties = ModalBottomSheetProperties(shouldDismissOnBackPress = false),
     ) {
+        val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+        SideEffect { keyboardVisible = imeVisible }
         BackHandler { onBack?.invoke() ?: scope.launch { state.hide() }.invokeOnCompletion { onDismiss() } }
         Column(Modifier.fillMaxHeight().navigationBarsPadding().imePadding().padding(start = 16.dp, end = 16.dp)) {
             Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically, content = header)

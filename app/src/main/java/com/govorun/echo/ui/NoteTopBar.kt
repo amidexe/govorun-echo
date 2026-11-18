@@ -21,6 +21,7 @@ import com.adamglin.phosphoricons.regular.ArrowLeft
 import com.adamglin.phosphoricons.regular.ArrowUUpLeft
 import com.adamglin.phosphoricons.regular.CaretDown
 import com.adamglin.phosphoricons.regular.CaretUp
+import com.adamglin.phosphoricons.regular.Check
 import com.adamglin.phosphoricons.regular.DotsThree
 import com.adamglin.phosphoricons.regular.ShareNetwork
 import com.adamglin.phosphoricons.regular.X
@@ -64,7 +65,11 @@ internal fun NoteTopBar(
         title = {
             when {
                 fairState.editing -> Text(stringResource(R.string.text_editing))
-                current != null -> Text(stringResource(R.string.fragment_title))
+                current != null -> Text(
+                    stringResource(R.string.fragment_title),
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
                 shownFind != null ->
                     Text(
                         stringResource(
@@ -126,11 +131,15 @@ internal fun NoteTopBar(
                             modifier = Modifier.size(ProductTokens.Size.TopBarActionIcon),
                         )
                     }
-                    androidx.compose.material3.TextButton(
+                    IconButton(
                         onClick = onFragmentSave,
                         enabled = current.changed && !busy,
                     ) {
-                        Text(stringResource(R.string.fragment_save))
+                        Icon(
+                            PhosphorIcons.Regular.Check,
+                            contentDescription = stringResource(R.string.fragment_save),
+                            modifier = Modifier.size(ProductTokens.Size.TopBarActionIcon),
+                        )
                     }
                 }
             } else {

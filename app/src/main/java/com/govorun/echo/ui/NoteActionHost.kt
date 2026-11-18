@@ -14,6 +14,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 internal fun MainActivity.splitNote(
     id: String,
@@ -88,30 +89,29 @@ internal fun Activity.deleteNotes(
                 startService(RecordingService.postponeIntent(this, it.id))
             }
         }
-    val root = NoteStore.root(this)
-    val trash = NoteTrash.root(this)
-    val moved = NoteTrash.move(root, trash, ids)
-    onChanged()
-    if (moved.isNotEmpty()) {
-        ActionSounds.play(this, ActionSounds.DELETE)
-        com.govorun.echo.smart.FairQueue.deleted(this, moved)
-    }
-    if (moved.isNotEmpty())
-        scope.launch {
-            deleteBatch.deleted(
-                moved,
-                root,
-                trash,
-                snackbar,
-                {
-                    if (it == 1) getString(R.string.deleted_one)
-                    else getString(R.string.deleted_many, it)
-                },
-                getString(R.string.action_undo),
-            ) {
-                onRefresh()
-            }
+    scope.launch {
+        val (root, trash, moved) = withContext(Dispatchers.IO) {
+            val root = NoteStore.root(activity)
+            val trash = NoteTrash.root(activity)
+            Triple(root, trash, NoteTrash.move(root, trash, ids))
         }
+        onChanged()
+        if (moved.isEmpty()) return@launch
+        ActionSounds.play(activity, ActionSounds.DELETE)
+        com.govorun.echo.smart.FairQueue.deleted(activity, moved)
+        deleteBatch.deleted(
+            moved,
+            root,
+            trash,
+            snackbar,
+            {
+                if (it == 1) getString(R.string.deleted_one)
+                else getString(R.string.deleted_many, it)
+            },
+            getString(R.string.action_undo),
+            onRefresh,
+        )
+    }
 }
 
 internal suspend fun Activity.appendRecording(

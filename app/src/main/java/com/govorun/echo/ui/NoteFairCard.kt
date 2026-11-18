@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -179,7 +178,7 @@ internal fun FairCard(
     }
     DisposableEffect(note.id, editing) { onDispose { state.persist(context, note) } }
     Box(modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerLow, RoundedCornerShape(topStart = ProductTokens.Radius.Card, topEnd = ProductTokens.Radius.Card))) {
-        Column(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = if (editing) 16.dp else DOCK_CLEARANCE), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = if (editing) 16.dp else DOCK_CLEARANCE), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (!editing) {
                 tabs?.invoke {}
                 NoteTextHeader(note, actions)

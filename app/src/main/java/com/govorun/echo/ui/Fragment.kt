@@ -1,45 +1,47 @@
 package com.govorun.echo.ui
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.drag
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.FlowRowScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.ui.graphics.drawscope.translate
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.adamglin.PhosphorIcons
@@ -52,6 +54,7 @@ import com.adamglin.phosphoricons.regular.Scissors
 import com.adamglin.phosphoricons.regular.ShareNetwork
 import com.govorun.echo.R
 import com.govorun.echo.notes.AudioPeaks
+import com.product.ui.ProductTokens
 
 /**
  * The player panel while a piece of the note is chosen. Play stays where it always is; the record button gives its place to the
@@ -202,6 +205,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.bars(
  * The four things to do with the piece, along the bottom of the screen. Cutting and keeping change the note, so a joined note or
  * one whose text does not follow its words offers only the two that leave it as it is.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun FragmentActions(
     canEdit: Boolean,
@@ -212,44 +216,57 @@ internal fun FragmentActions(
     onCut: () -> Unit,
     onKeep: () -> Unit,
     onShare: () -> Unit,
-    modifier: Modifier = Modifier,
 ) {
-    Column(modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).navigationBarsPadding()) {
-        HorizontalDivider(color = MaterialTheme.colorScheme.surfaceContainerHighest)
-        if (busy) {
-            Box(Modifier.fillMaxWidth().height(64.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp) }
-            return@Column
-        }
-        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp)) {
-            FragmentAction(PhosphorIcons.Regular.FilePlus, R.string.fragment_separate, enabled = hasPiece && !wholeNote, onClick = onSeparate)
-            if (canEdit) {
-                FragmentAction(PhosphorIcons.Regular.Scissors, R.string.fragment_cut, enabled = hasPiece && !wholeNote, onClick = onCut)
-                FragmentAction(PhosphorIcons.Regular.Crop, R.string.fragment_keep, enabled = hasPiece && !wholeNote, onClick = onKeep)
+    NoteActionBar {
+        BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), contentAlignment = Alignment.Center) {
+            val separate = stringResource(R.string.fragment_separate)
+            val cut = stringResource(R.string.fragment_cut)
+            val keep = stringResource(R.string.fragment_keep)
+            val share = stringResource(R.string.action_share)
+            val labels = if (canEdit) listOf(separate, cut, keep, share) else listOf(separate, share)
+            val measurer = rememberTextMeasurer()
+            val style = MaterialTheme.typography.labelLarge
+            val widest = with(LocalDensity.current) {
+                labels.maxOf { measurer.measure(it, style, maxLines = 1, softWrap = false).size.width }.toDp()
             }
-            FragmentAction(PhosphorIcons.Regular.ShareNetwork, R.string.action_share, enabled = hasPiece, onClick = onShare)
+            val columns = if (maxWidth / labels.size >= widest + 4.dp) labels.size else 2
+            val shown = if (busy) Modifier.alpha(0f).clearAndSetSemantics {} else Modifier
+            val canChange = !busy && hasPiece && !wholeNote
+            FlowRow(shown.fillMaxWidth(), maxItemsInEachRow = columns) {
+                FragmentAction(PhosphorIcons.Regular.FilePlus, separate, enabled = canChange, onClick = onSeparate)
+                if (canEdit) {
+                    FragmentAction(PhosphorIcons.Regular.Scissors, cut, enabled = canChange, onClick = onCut)
+                    FragmentAction(PhosphorIcons.Regular.Crop, keep, enabled = canChange, onClick = onKeep)
+                }
+                FragmentAction(PhosphorIcons.Regular.ShareNetwork, share, enabled = !busy && hasPiece, onClick = onShare)
+            }
+            if (busy) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
         }
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun androidx.compose.foundation.layout.RowScope.FragmentAction(
+private fun FlowRowScope.FragmentAction(
     icon: ImageVector,
-    label: Int,
+    label: String,
     enabled: Boolean,
     onClick: () -> Unit,
 ) {
-    val color = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
-    Column(
-        Modifier
-            .weight(1f)
-            .clip(RoundedCornerShape(14.dp))
-            .clickable(enabled = enabled, interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
-            .padding(vertical = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+    TextButton(
+        onClick = onClick,
+        modifier = Modifier.weight(1f).heightIn(min = ProductTokens.Size.TouchTarget),
+        enabled = enabled,
+        contentPadding = PaddingValues(vertical = 6.dp),
     ) {
-        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(24.dp))
-        Text(stringResource(label), style = MaterialTheme.typography.labelLarge, color = if (enabled) MaterialTheme.colorScheme.onSurface else color)
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(24.dp))
+            Text(
+                label,
+                textAlign = TextAlign.Center,
+                color = if (enabled) MaterialTheme.colorScheme.onSurface else LocalContentColor.current,
+            )
+        }
     }
 }
 

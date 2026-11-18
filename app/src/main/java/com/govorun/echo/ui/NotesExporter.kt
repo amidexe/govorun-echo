@@ -12,6 +12,8 @@ import com.govorun.echo.R
 import com.govorun.echo.notes.NoteStore
 import com.govorun.echo.TextOptions
 import com.govorun.echo.export.ClipExport
+import com.govorun.echo.export.ExportCache
+import java.io.File
 
 /**
  * Takes notes out of the app: text, or text with audio (and subtitles), through the share sheet or straight into a file; one note
@@ -37,7 +39,12 @@ internal class NotesExporter(
             Thread {
                 val saved =
                     runCatching {
-                        activity.contentResolver.openOutputStream(uri)!!.use { com.govorun.echo.export.Exporter.zipTo(it.buffered(), items, java.io.File(activity.cacheDir, "exports").apply { mkdirs() }) }
+                        val scratch = ExportCache.create(activity)
+                        try {
+                            activity.contentResolver.openOutputStream(uri)!!.use { com.govorun.echo.export.Exporter.zipTo(it.buffered(), items, scratch) }
+                        } finally {
+                            ExportCache.finish(scratch, handedOff = false)
+                        }
                     }.isSuccess
                 activity.runOnUiThread { Toast.makeText(activity, if (saved) R.string.export_saved else R.string.export_save_failed, Toast.LENGTH_LONG).show() }
             }.start()
@@ -122,24 +129,31 @@ internal class NotesExporter(
     /** The note as a video with its text: made in the background with its progress shown, then handed on. */
     private fun makeVideo(
         note: NoteStore.Entry,
-        then: (java.io.File) -> Unit,
+        then: (File) -> Unit,
     ) {
         stopMaking = false
         making = 0f
         Thread {
-            val file = java.io.File(exportsDir(), "${nameOf(note)}.mp4")
             var shown = 0f
-            val made =
-                ClipExport.video(activity, NoteStore.withPhrases(activity, note), file, cancelled = { stopMaking }) { done ->
-                    // The screen follows by whole percents, not by every piece of sound.
-                    if (done - shown >= 0.01f) {
-                        shown = done
-                        activity.runOnUiThread { if (making != null) making = done }
+            val file = runCatching {
+                val directory = ExportCache.create(activity)
+                val target = File(directory, "${nameOf(note)}.mp4")
+                var made = false
+                try {
+                    made = ClipExport.video(activity, NoteStore.withPhrases(activity, note), target, cancelled = { stopMaking }) { done ->
+                        if (done - shown >= 0.01f) {
+                            shown = done
+                            activity.runOnUiThread { if (making != null) making = done }
+                        }
                     }
+                    target.takeIf { made }
+                } finally {
+                    if (!made) ExportCache.finish(directory, handedOff = false)
                 }
+            }.getOrNull()
             activity.runOnUiThread {
                 making = null
-                if (made) then(file) else if (!stopMaking) Toast.makeText(activity, R.string.export_failed, Toast.LENGTH_SHORT).show()
+                if (file != null) then(file) else if (!stopMaking) Toast.makeText(activity, R.string.export_failed, Toast.LENGTH_SHORT).show()
             }
         }.start()
     }
@@ -149,26 +163,29 @@ internal class NotesExporter(
         asked: ExportRequest,
         kinds: Set<ShareKind>,
         options: TextOptions,
-        video: java.io.File?,
+        video: File?,
     ) {
         if (video == null) Toast.makeText(activity, R.string.export_preparing, Toast.LENGTH_SHORT).show()
         Thread {
-            val files =
-                runCatching {
-                    val dir = if (video != null) video.parentFile!! else exportsDir()
+            val files = runCatching {
+                val dir = video?.parentFile ?: ExportCache.create(activity)
+                var ready = false
+                try {
                     val items = exportItems(asked, kinds, options)
-                    if (items.size == 1) {
+                    val output = if (items.size == 1) {
                         com.govorun.echo.export.Exporter.bundle(dir, items.single(), video)
                     } else {
-                        listOf(com.govorun.echo.export.Exporter.zipFile(java.io.File(dir, "govorun-echo-notes.zip"), items))
+                        listOf(com.govorun.echo.export.Exporter.zipFile(File(dir, "govorun-echo-notes.zip"), items))
                     }
-                }.getOrNull()?.takeIf { it.isNotEmpty() }
+                    ready = output.isNotEmpty()
+                    output.takeIf { ready }
+                } finally {
+                    ExportCache.finish(dir, handedOff = ready)
+                }
+            }.getOrNull()
             activity.runOnUiThread { if (files != null) share(files) else Toast.makeText(activity, R.string.export_failed, Toast.LENGTH_SHORT).show() }
         }.start()
     }
-
-    /** Only what is handed to another app lies in cache/exports, and only the last of it. */
-    private fun exportsDir(): java.io.File = java.io.File(activity.cacheDir, "exports").apply { mkdirs(); listFiles().orEmpty().forEach { it.deleteRecursively() } }
 
     private fun nameOf(note: NoteStore.Entry): String = com.govorun.echo.export.Exporter.uniqueNames(listOf(com.govorun.echo.export.ExportItem(note.startedAtMs, "", emptyList()))).single()
 

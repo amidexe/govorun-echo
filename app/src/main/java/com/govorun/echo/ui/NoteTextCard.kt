@@ -9,8 +9,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -30,7 +28,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -51,6 +48,7 @@ internal fun NoteTextCard(
     modifier: Modifier,
     onTags: () -> Unit,
     wordsRead: Boolean,
+    textDraft: Boolean,
     find: FindInNote?,
     fairState: FairState,
     /** «Расшифровка · Чистовик» at the top of the card, when the note has a fair copy. */
@@ -59,7 +57,6 @@ internal fun NoteTextCard(
         (@Composable androidx.compose.foundation.layout.RowScope.() -> Unit) -> Unit)? =
         null,
 ) {
-    val app = LocalContext.current
     val scroll = rememberScrollState()
     // While the note plays the text follows the spoken word; a finger scrolling away to read ahead
     // stops that until «К звуку».
@@ -89,10 +86,9 @@ internal fun NoteTextCard(
     ) {
         Column(
             Modifier.fillMaxSize()
-                .imePadding()
                 .pointerInput(note.id) { watchFinger { follow = false } }
                 .verticalScroll(scroll)
-                .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = DOCK_CLEARANCE),
+                .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = if (textDraft) 16.dp else DOCK_CLEARANCE),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             tabs?.invoke {}
@@ -108,9 +104,7 @@ internal fun NoteTextCard(
             when {
                 // Only a new typed/shared draft is authored here. Kept originals stay read-only,
                 // even after audio is removed.
-                note.mode == NoteText.MODE &&
-                    remember(note.id) { NoteText.isDraft(NoteStore.root(app), note.id) } &&
-                    note.state == NoteStore.STATE_DONE -> TextNoteBody(note, actions)
+                textDraft -> TextNoteBody(note, actions)
                 note.text.isBlank() -> {
                     val gate by
                         com.govorun.echo.recognition.RecognitionStatus.pausedReason.collectAsState()
@@ -175,7 +169,6 @@ internal fun NoteTextCard(
                 onClick = { follow = true },
                 modifier =
                     Modifier.align(Alignment.BottomCenter)
-                        .navigationBarsPadding()
                         .padding(bottom = 20.dp),
                 shape = RoundedCornerShape(ProductTokens.Radius.Xl),
                 color = MaterialTheme.colorScheme.secondaryContainer,

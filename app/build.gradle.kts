@@ -12,8 +12,8 @@ android {
         applicationId = "com.govorun.echo"
         minSdk = 31
         targetSdk = 35
-        versionCode = 284
-        versionName = "0.1.283"
+        versionCode = 286
+        versionName = "0.1.285"
         // Public identifier for the Android OAuth client. The device obtains its own token.
         manifestPlaceholders["YANDEX_CLIENT_ID"] = "b40b6b8a28a844cc8aca1298aca70e05"
         buildConfigField("String", "UPDATE_FEED", "\"\"")

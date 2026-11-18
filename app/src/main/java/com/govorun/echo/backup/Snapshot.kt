@@ -3,6 +3,7 @@ package com.govorun.echo.backup
 import android.content.Context
 import com.govorun.echo.AppSettings
 import com.govorun.echo.notes.NoteStore
+import com.govorun.echo.notes.NoteTrash
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -90,16 +91,25 @@ internal object Snapshot {
     /** After an install with restored data and no notes yet: bring the notes back from the snapshot. */
     fun restoreIfEmpty(context: Context) {
         val root = NoteStore.root(context)
-        if (root.listFiles { f -> f.isDirectory }.orEmpty().isNotEmpty()) return
+        val trash = NoteTrash.root(context)
+        if (!canRestoreAutomatically(root, trash)) return
         val json =
             runCatching {
                 if (file(context).exists()) JSONObject(java.util.zip.GZIPInputStream(file(context).inputStream()).bufferedReader().use { it.readText() })
                 else JSONObject(legacy(context).readText())
             }.getOrNull() ?: return
-        restore(root, json)
+        synchronized(NoteStore) {
+            if (!canRestoreAutomatically(root, trash)) return
+            restore(root, json)
+        }
         val settings = json.optJSONObject("settings")
         if(settings != null) PortablePreferences.restore(context,settings,false) else AppSettings.restoreTags(context, json.optJSONObject("tags") ?: JSONObject())
     }
+
+    /** An otherwise empty inbox can be the result of deletion, not a fresh installation. */
+    internal fun canRestoreAutomatically(root: File, trash: File): Boolean =
+        root.listFiles { it.isDirectory || it.name == NoteStore.DELETED }?.isEmpty() == true &&
+            trash.listFiles()?.isEmpty() == true
 
     fun build(
         root: File,

@@ -3,6 +3,8 @@ package com.govorun.echo.ui
 import androidx.compose.material3.SnackbarHostState
 import com.govorun.echo.notes.NoteTrash
 import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Deleting is moving to the trash. A series of quick deletes shares one "Undo" that brings all of
@@ -28,8 +30,9 @@ internal class DeleteBatch {
         ids += moved
         val mine = ++token
         if (snackbar.showUndo(message(ids.size), undo)) {
-            NoteTrash.restore(root, trash, ids.toList())
+            val goingBack = ids.toList()
             ids.clear()
+            withContext(Dispatchers.IO) { NoteTrash.restore(root, trash, goingBack) }
             reload()
         } else if (mine == token) {
             ids.clear()
