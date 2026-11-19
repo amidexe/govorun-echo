@@ -3,6 +3,8 @@ package com.govorun.echo.notes
 import android.content.Context
 import org.json.JSONObject
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.LinkOption.NOFOLLOW_LINKS
 import java.util.UUID
 import com.govorun.echo.audio.Pcm
 import com.govorun.echo.CapturePurpose
@@ -22,6 +24,12 @@ object NoteStore {
     fun newNote(context: Context): Pair<String, File> {
         val id = "${System.currentTimeMillis()}-${UUID.randomUUID().toString().take(8)}"
         return id to File(root(context), id).apply { File(this, "chunks").mkdirs() }
+    }
+
+    /** A writer can add audio to its note, but must never recreate a note moved to the trash. */
+    internal fun ensureChunks(dir: File): File? {
+        if (!Files.isDirectory(dir.toPath(), NOFOLLOW_LINKS)) return null
+        return File(dir, "chunks").takeIf { it.mkdir() || Files.isDirectory(it.toPath(), NOFOLLOW_LINKS) }
     }
 
     fun durationMs(bytes: Long): Long = bytes * 1_000L / BYTES_PER_SECOND
@@ -84,26 +92,6 @@ object NoteStore {
         ids: List<String>,
         inOrder: Boolean = false,
     ): String? = NoteMerge.merge(root, ids, inOrder)
-
-    /** Deletes finished notes older than [days]; running or recognizing ones are never touched. */
-    fun deleteOlderThan(
-        root: File,
-        days: Int,
-        nowMs: Long = System.currentTimeMillis(),
-    ): Int {
-        if (days <= 0) return 0
-        val cutoff = nowMs - days * 86_400_000L
-        var removed = 0
-        root.listFiles { f -> f.isDirectory }.orEmpty().forEach { dir ->
-            val meta = runCatching { JSONObject(File(dir, "meta.json").readText()) }.getOrNull() ?: return@forEach
-            val state = meta.optString("state")
-            if (state == STATE_RECORDING || state == STATE_RECOGNIZING || meta.optBoolean("archived")) return@forEach
-            if (meta.optLong("startedAtMs") in 1 until cutoff && remove(dir)) removed++
-        }
-        return removed
-    }
-
-    fun usageBytes(root: File): Long = root.walkTopDown().filter { it.isFile }.sumOf { it.length() }
 
     fun noteDir(
         context: Context,

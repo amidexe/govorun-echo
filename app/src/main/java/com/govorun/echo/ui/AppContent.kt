@@ -105,7 +105,6 @@ internal fun MainActivity.App() {
         var selfTest by remember { mutableStateOf<String?>(null) }
         var selfTestRunning by remember { mutableStateOf(false) }
         var hotkeyEnabled by remember { mutableStateOf(AppSettings.hotkeyEnabled(this@App)) }
-        var retention by remember { mutableIntStateOf(AppSettings.retentionDays(this@App)) }
         val snackbar = remember { SnackbarHostState() }
         val deleteBatch = remember { DeleteBatch() }
         LaunchedEffect(current.key) {
@@ -148,14 +147,23 @@ internal fun MainActivity.App() {
                 com.govorun.echo.notes.NoteChanges.events.collect { changes++ }
             }
         }
-        LaunchedEffect(resumes, changes, recordingState, backupHost.changed) {
+        LaunchedEffect(resumes) {
+            val opened = navigation.current.takeIf { it.screen == Screen.Note }?.argument
+            val requested = pendingOpen?.let { SavedNotice.noteOf(it)?.id }
+            val listening = player.state.value.takeIf { it.playing }?.noteId
+            val moved = withContext(Dispatchers.IO) {
+                com.govorun.echo.notes.InactiveNotes.applyRule(this@App, setOfNotNull(opened, requested, listening))
+            }
+            if (moved > 0) changes++
+        }
+        LaunchedEffect(resumes, changes, recordingState) {
             // With the screen off nobody looks at the list: it is read again the moment the app
             // comes back.
             lifecycle.whileVisible {
                 while (true) {
                     notes =
                         withContext(Dispatchers.IO) {
-                            com.govorun.echo.notes.NoteAutoArchive.refresh(this@App)
+                            NoteStore.list(this@App)
                         }
                     hotkeyServiceOn = hotkeyServiceEnabled(this@App)
                     selected = selected.filter { id -> notes.any { it.id == id } }.toSet()
@@ -241,12 +249,9 @@ internal fun MainActivity.App() {
         notesActionsRef = notesActions
         val settingsActions =
             createSettingsActions(
-                { notes },
-                scope,
                 onNavigate = { screen -> if (navigation.current == current) navigation.open(screen) },
                 onBack = { navigation.back(current) },
                 onHotkey = { hotkeyEnabled = it },
-                onRetention = { retention = it },
                 onChanged = { changes++ },
                 onHelp = {
                     onboardingStep = OnboardingStep.Welcome
@@ -354,6 +359,11 @@ internal fun MainActivity.App() {
                                 )
                                     LaunchedEffect(Unit) { navigation.back(shown) }
                             } else {
+                                LaunchedEffect(note.id, resumes, shown == current) {
+                                    if (shown == current) withContext(Dispatchers.IO) {
+                                        com.govorun.echo.notes.InactiveNotes.used(this@App, note.id)
+                                    }
+                                }
                                 NoteScreen(
                                     note,
                                     playing.takeIf { it.noteId == note.id },
@@ -370,12 +380,10 @@ internal fun MainActivity.App() {
                         }
                         Screen.Settings -> {
                             SettingsRoute(
-                                notes.size,
-                                backupHost.changed,
+                                notes.takeIf { notesLoaded },
                                 hotkeyEnabled,
                                 themeMode,
                                 dynamicColors,
-                                retention,
                                 advancedMode,
                                 settingsActions,
                             )

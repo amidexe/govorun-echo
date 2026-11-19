@@ -373,6 +373,9 @@ class NotePlayer private constructor(
         PlaybackService.start(context)
         raiseToListen.playing(true)
         current.play()
+        state.value.noteId?.let { id ->
+            CoroutineScope(Dispatchers.IO).launch { com.govorun.echo.notes.InactiveNotes.used(context, id) }
+        }
         state.value = state.value.copy(playing = true)
         handler.removeCallbacks(tick)
         handler.post(tick)

@@ -66,6 +66,10 @@ internal class ContinuousArchive(
 
     private fun run() {
         try {
+            if (NoteStore.ensureChunks(dir) == null) {
+                failed = true
+                return
+            }
             val encoder = OpusFileEncoder(liveFile(dir))
             try {
                 while (true) {
@@ -100,7 +104,7 @@ internal class ContinuousArchive(
         private const val QUEUE_BUFFERS = 1_000
         private const val JOIN_MS = 20_000L
 
-        fun liveFile(dir: File): File = File(File(dir, "chunks").apply { mkdirs() }, "live.ogg")
+        fun liveFile(dir: File): File = File(dir, "chunks/live.ogg")
 
         /**
          * Makes the live file of a note (finished, or cut off by a crash) its next sound file: a rename, the file is already whole.
@@ -139,7 +143,7 @@ internal fun archiveSlice(
     length: Long,
     encode: (File, Long, Long, File) -> File? = AudioArchive::encode,
 ): Boolean {
-    val chunks = File(dir, "chunks").apply { mkdirs() }
+    val chunks = NoteStore.ensureChunks(dir) ?: return false
     val index = runCatching { JSONObject(File(dir, "meta.json").readText()).optJSONObject("audio")?.length() }.getOrNull() ?: 0
     val file = File(chunks, "%03d.ogg".format(index))
     if (encode(pcm, offset, length, file) == null) {

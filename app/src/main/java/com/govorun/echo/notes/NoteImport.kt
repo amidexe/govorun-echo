@@ -31,11 +31,15 @@ internal object NoteImport {
         try {
             return prepareNote(context, uri, id, dir, speechFilter)
         } catch (error: Exception) {
-            android.util.Log.w("Echo", "event=import_failed note=$id", error)
-            if (dir.isDirectory) NoteStore.updateMeta(dir) {
-                put("state", NoteStore.STATE_FAILED)
-                put("error", "import_failed")
-                remove("preparedMs")
+            synchronized(NoteStore) {
+                if (dir.isDirectory) {
+                    android.util.Log.w("Echo", "event=import_failed note=$id", error)
+                    NoteStore.updateMeta(dir) {
+                        put("state", NoteStore.STATE_FAILED)
+                        put("error", "import_failed")
+                        remove("preparedMs")
+                    }
+                }
             }
             return null
         } finally {
@@ -63,6 +67,7 @@ internal object NoteImport {
         // The only real limit on what can be imported: room for its decoded sound (16 kHz, about 115 MB an hour) while it is
         // recognized. Several files queue up; length and number are not limited, the phone's temperature is minded instead.
         val length = durationMs(context, uri)
+        if (!dir.isDirectory) return null
         val needed = length * NoteStore.BYTES_PER_SECOND / 1_000L + NoteStore.MIN_FREE_BYTES
         if (context.filesDir.usableSpace < needed) {
             NoteStore.updateMeta(dir) {
@@ -72,6 +77,7 @@ internal object NoteImport {
             return null
         }
         val kept = keepOriginal(context, uri, dir)
+        if (!dir.isDirectory) return null
         val part = File(dir, "audio.pcm.part")
         val peaks = LivePeaks()
         // The card shows its progress line from the start: how much of the file is decoded, while it is.
@@ -137,7 +143,7 @@ internal object NoteImport {
             val audio = formats.firstOrNull { it.getString(MediaFormat.KEY_MIME).orEmpty().startsWith("audio/") } ?: return@runCatching null
             if (!AudioFormats.keepsAsIs(audio.getString(MediaFormat.KEY_MIME).orEmpty())) return@runCatching null
             val extension = AudioFormats.extensionFor(displayName(context, uri), context.contentResolver.getType(uri)) ?: return@runCatching null
-            val chunks = File(dir, "chunks").apply { mkdirs() }
+            val chunks = NoteStore.ensureChunks(dir) ?: return@runCatching null
             val name = "000.$extension"
             val partial = File(chunks, "$name.part")
             val copied = context.contentResolver.openInputStream(uri)?.use { input -> partial.outputStream().use { input.copyTo(it, 256 * 1024) } }

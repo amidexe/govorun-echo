@@ -52,8 +52,14 @@ fun <T> ProductChoiceSheet(
     optionDescription: (T) -> String? = { null },
     optionEnabled: (T) -> Boolean = { true },
     optionIcon: (T) -> ImageVector? = { null },
+    description: String? = null,
 ) {
     ProductSheet(title, onDismissRequest) {
+        if (description != null) {
+            Text(description, style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = ProductTokens.Spacing.Lg))
+        }
         Column(Modifier.selectableGroup()) {
             ProductRowGroup {
                 options.forEach { option ->

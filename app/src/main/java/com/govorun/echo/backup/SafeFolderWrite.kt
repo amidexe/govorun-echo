@@ -15,7 +15,7 @@ internal interface FolderDocuments<T> {
     fun delete(doc: T)
 }
 
-internal fun <T> safeFolderWrite(files: FolderDocuments<T>, previous: T?, name: String, checkAccess: () -> Unit = {}, body: (OutputStream) -> Unit): T {
+internal fun <T> safeFolderWrite(files: FolderDocuments<T>, previous: T?, name: String, checkAccess: () -> Unit = {}, beforePublish: () -> Unit = {}, body: (OutputStream) -> Unit): T {
     val suffix = UUID.randomUUID().toString()
     checkAccess()
     var staged: T? = files.create(".echo-part-$suffix")
@@ -26,6 +26,7 @@ internal fun <T> safeFolderWrite(files: FolderDocuments<T>, previous: T?, name: 
         files.output(staged!!).use(body)
         // Once replacement begins, finish or roll it back even if the route changes.
         checkAccess()
+        beforePublish()
         if (previous != null) backup = files.rename(previous, ".echo-previous-$suffix")
         published = files.rename(checkNotNull(staged), name)
         staged = null
@@ -41,7 +42,7 @@ internal fun <T> safeFolderWrite(files: FolderDocuments<T>, previous: T?, name: 
 }
 
 internal object SafeFolderWrite {
-    fun write(resolver: ContentResolver, present: MutableMap<String, Uri>, parent: Uri, mime: String, name: String, checkAccess: () -> Unit, body: (OutputStream) -> Unit) {
+    fun write(resolver: ContentResolver, present: MutableMap<String, Uri>, parent: Uri, mime: String, name: String, checkAccess: () -> Unit, beforePublish: () -> Unit = {}, body: (OutputStream) -> Unit) {
         val files = object : FolderDocuments<Uri> {
             override fun create(name: String) = DocumentsContract.createDocument(resolver, parent, mime, name) ?: error("create_failed")
             override fun output(doc: Uri) = resolver.openOutputStream(doc, "wt") ?: error("open_failed")
@@ -49,7 +50,7 @@ internal object SafeFolderWrite {
             override fun name(doc: Uri): String = resolver.query(doc, arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null)?.use { if (it.moveToFirst()) it.getString(0) else null } ?: error("name_failed")
             override fun delete(doc: Uri) { check(DocumentsContract.deleteDocument(resolver, doc)) { "delete_failed" } }
         }
-        present[name] = safeFolderWrite(files, present[name], name, checkAccess) { output ->
+        present[name] = safeFolderWrite(files, present[name], name, checkAccess, beforePublish) { output ->
             body(object : java.io.FilterOutputStream(output) {
                 override fun write(value: Int) { checkAccess(); output.write(value) }
                 override fun write(bytes: ByteArray, offset: Int, count: Int) { checkAccess(); output.write(bytes, offset, count) }

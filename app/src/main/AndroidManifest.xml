@@ -59,6 +59,7 @@
         android:label="${launcherLabel}"
         android:supportsRtl="true"
         android:theme="@style/Theme.Echo">
+        <activity android:name=".ui.FileExportActivity" android:exported="false" android:configChanges="orientation|screenSize" />
         <activity android:name=".ui.TransferActivity" android:exported="false" android:configChanges="orientation|screenSize" />
 
         <activity

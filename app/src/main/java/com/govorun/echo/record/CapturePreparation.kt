@@ -14,7 +14,7 @@ import java.io.File
 internal data class PreparedCapture(val noteId: String, val dir: File, val startedAtMs: Long, val appendBaseMs: Long?)
 
 /** Same file transaction for phone and headset: input is ready before any existing note is changed. */
-internal fun prepareCapture(context: Context, mode: String, appendTo: String?, tag: String?, purpose: CapturePurpose): PreparedCapture {
+internal fun prepareCapture(context: Context, mode: String, appendTo: String?, tag: String?, purpose: CapturePurpose): PreparedCapture = synchronized(NoteStore) {
     val existing = appendTo?.let { File(NoteStore.root(context), it) }?.takeIf { NoteStore.isAppendable(it) }
     val (noteId, dir) = if (existing != null) existing.name to existing else NoteStore.newNote(context)
     val startedAtMs = System.currentTimeMillis()
@@ -38,7 +38,7 @@ internal fun prepareCapture(context: Context, mode: String, appendTo: String?, t
             .apply { if (purpose != CapturePurpose.NOTE) put(CapturePurpose.FIELD, purpose.id) }
             .apply { tag?.let { put("tags", org.json.JSONArray().put(it)) } })
     }
-    return PreparedCapture(noteId, dir, startedAtMs, base)
+    PreparedCapture(noteId, dir, startedAtMs, base)
 }
 
 internal fun recordingEnvironment(context: Context): NoteCapture.Environment {

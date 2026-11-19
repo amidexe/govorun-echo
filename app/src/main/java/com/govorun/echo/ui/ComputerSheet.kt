@@ -107,7 +107,7 @@ internal fun ComputerSheet(
         entries = withContext(Dispatchers.IO) { NoteStore.list(context) }
     }
     val tags = (entries.flatMap { it.tags } + com.govorun.echo.AppSettings.tags(context)).distinct().sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it })
-    if (picking) ComputerTagPicker(tags, selection, { selection = it; picking = false }, { picking = false })
+    if (picking) ScopeTagPicker(tags, selection.tags, R.string.computer_pick_title, { selection = ComputerSelection(it); picking = false }, { picking = false })
     if (details && active != null) AlertDialog(
         onDismissRequest = { details = false },
         title = { Text(stringResource(R.string.computer_session_info)) },
@@ -247,14 +247,15 @@ private fun computerDate(at: Long): String = java.text.DateFormat.getDateTimeIns
 
 /** The existing tag shelf, restricted to choosing the computer's scope; no tag edits or note counts. */
 @Composable
-private fun ComputerTagPicker(
+internal fun ScopeTagPicker(
     tags: List<String>,
-    initial: ComputerSelection,
-    onDone: (ComputerSelection) -> Unit,
+    initial: Set<String>?,
+    title: Int,
+    onDone: (Set<String>?) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
-    var selected by remember { mutableStateOf(initial.tags) }
+    var selected by remember { mutableStateOf(initial) }
     var query by remember { mutableStateOf("") }
     val styles = remember {
         val aliases = AppSettings.tagAliases(context)
@@ -270,8 +271,8 @@ private fun ComputerTagPicker(
         onDismiss = onDismiss,
         header = {
             IconButton(onClick = onDismiss) { Icon(PhosphorIcons.Regular.X, contentDescription = stringResource(R.string.action_cancel), modifier = Modifier.size(com.product.ui.ProductTokens.Size.ActiveIcon)) }
-            Text(stringResource(R.string.computer_pick_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-            TextButton(onClick = { onDone(ComputerSelection(selected)) }, enabled = selected == null || selected!!.isNotEmpty()) { Text(stringResource(R.string.action_done)) }
+            Text(stringResource(title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            TextButton(onClick = { onDone(selected) }, enabled = selected == null || selected!!.isNotEmpty()) { Text(stringResource(R.string.action_done)) }
         },
         query = query,
         searchHint = stringResource(R.string.computer_tag_search),

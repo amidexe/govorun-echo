@@ -16,7 +16,7 @@ import com.govorun.echo.TextOptions
 
 internal enum class Screen {
     Notes, Note, Settings, Commands, AdvancedCommands, CommandEdit, CommandCreate, CommandHistory,
-    Journal, Trash, Licenses, License, About, Experiments,
+    Journal, Trash, Licenses, License, About, Experiments, StorageGuide,
 }
 
 /** What stands between the owner and a working note, in the order it should be fixed. */
@@ -206,6 +206,7 @@ internal fun stopLabel(note: NoteStore.Entry): Int? =
 
 internal fun formatSize(bytes: Long): String =
     when {
+        bytes >= 1_073_741_824 -> "%.1f ГБ".format(bytes / 1_073_741_824.0)
         bytes >= 1_048_576 -> "%.1f МБ".format(bytes / 1_048_576.0)
         else -> "%d КБ".format((bytes + 1_023) / 1_024)
     }

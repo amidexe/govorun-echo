@@ -6,37 +6,22 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
 import com.govorun.echo.AppSettings
-import com.govorun.echo.backup.BackupFolder
 import com.govorun.echo.commands.Command
 import com.govorun.echo.commands.CommandStore
 import com.govorun.echo.commands.CommandTemplate
 import com.govorun.echo.notes.NoteStore
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 /** Loads derived settings only while Settings is visible; choices still belong to MainActivity. */
 @Composable
 internal fun SettingsRoute(
-    noteCount: Int,
-    backupRevision: Int,
+    notes: List<NoteStore.Entry>?,
     hotkeyEnabled: Boolean,
     themeMode: Int,
     dynamicColors: Boolean,
-    retentionDays: Int,
     advancedMode: Boolean,
     actions: SettingsActions,
 ) {
     val context = LocalContext.current
-    var usage by remember { mutableStateOf(0L) }
-    var backup by remember { mutableStateOf<com.govorun.echo.backup.BackupFolder.Status?>(null) }
-    val networkRevision by com.govorun.echo.NetworkPolicy.changes.collectAsState()
-    LaunchedEffect(backupRevision, noteCount, networkRevision) {
-        backup =
-            withContext(Dispatchers.IO) { com.govorun.echo.backup.BackupFolder.status(context) }
-    }
-    LaunchedEffect(noteCount) {
-        usage = withContext(Dispatchers.IO) { NoteStore.usageBytes(NoteStore.root(context)) }
-    }
     SettingsScreen(
         SettingsState(
             serviceEnabled = hotkeyServiceEnabled(context),
@@ -45,10 +30,7 @@ internal fun SettingsRoute(
             stamps = AppSettings.stampsInText(context),
             themeMode = themeMode,
             dynamicColors = dynamicColors,
-            retentionDays = retentionDays,
-            noteCount = noteCount,
-            usageBytes = usage,
-            backup = backup,
+            noteIds = remember(notes) { notes?.mapTo(HashSet()) { it.id } },
             advanced = advancedMode,
         ),
         actions,
@@ -111,10 +93,8 @@ internal fun SecondaryScreens(
     when (page.screen) {
         Screen.CommandHistory -> CommandHistoryScreen(onBack, page.argument)
         Screen.Journal -> JournalScreen(onBack = onBack)
-        Screen.Experiments -> ExperimentalSettingsScreen(
-            onBack = onBack,
-            onPickFolder = settings.onPickBackup,
-        )
+        Screen.StorageGuide -> StorageGuideScreen(onBack)
+        Screen.Experiments -> ExperimentalSettingsScreen(onBack)
         Screen.About ->
             AboutScreen(
                 install,

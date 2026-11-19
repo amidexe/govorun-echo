@@ -9,7 +9,6 @@ object AppSettings {
     private const val KEY_HOTKEY = "hotkey_enabled"
     private const val KEY_THEME = "theme_mode"
     private const val KEY_DYNAMIC = "dynamic_colors"
-    private const val KEY_RETENTION = "retention_days"
     private const val KEY_COLLAPSED_DAYS = "collapsed_days"
     private const val KEY_PLAY_NEXT = "play_next"
     private const val KEY_STAMPS = "stamps_in_text"
@@ -41,7 +40,6 @@ object AppSettings {
     private const val KEY_BRIEF_OPEN = "brief_open"
     private const val KEY_FAIR_STYLE = "fair_style"
     private const val KEY_AUTO_TITLES_CLEARED = "auto_titles_cleared"
-    private const val KEY_MARKDOWN_COPY = "markdown_copy"
     private const val KEY_SEARCH_ORDER = "search_order"
     private const val KEY_SMART_FUNCTIONS = "smart_functions"
 
@@ -114,14 +112,6 @@ object AppSettings {
     fun dynamicColors(context: Context): Boolean = prefs(context).getBoolean(KEY_DYNAMIC, false)
 
     fun setDynamicColors(context: Context, value: Boolean) = prefs(context).edit().putBoolean(KEY_DYNAMIC, value).apply()
-
-    /** Notes older than this many days are deleted when the app opens; 0 keeps everything. */
-    fun autoArchive(context: Context): Boolean = prefs(context).getBoolean("auto_archive", false)
-    fun setAutoArchive(context: Context, on: Boolean) { prefs(context).edit().putBoolean("auto_archive", on).apply() }
-
-    fun retentionDays(context: Context): Int = prefs(context).getInt(KEY_RETENTION, 0)
-
-    fun setRetentionDays(context: Context, value: Int) = prefs(context).edit().putInt(KEY_RETENTION, value).apply()
 
     /** Keep the recording as compressed audio next to its text so it can be played back. */
     /** Tags made with "+" before any note has them; a tag put on a note by hand lives only as long as a note carries it. */
@@ -357,10 +347,6 @@ object AppSettings {
 
     fun setAutoTitlesCleared(context: Context) = prefs(context).edit().putBoolean(KEY_AUTO_TITLES_CLEARED, true).apply()
 
-    /** Whether the copy folder also gets each note as a Markdown file for Obsidian (an experimental setting); off by default. */
-    fun markdownCopy(context: Context): Boolean = prefs(context).getBoolean(KEY_MARKDOWN_COPY, false)
-
-    fun setMarkdownCopy(context: Context, value: Boolean) = prefs(context).edit().putBoolean(KEY_MARKDOWN_COPY, value).apply()
 
 
 
@@ -373,7 +359,7 @@ object AppSettings {
 
     fun setInstallInfoJson(context: Context, value: String) = prefs(context).edit().putString(KEY_INSTALL_INFO, value).apply()
 
-    private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    internal fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 }
 
 /** What the owner chose to put into the text that leaves the app. */

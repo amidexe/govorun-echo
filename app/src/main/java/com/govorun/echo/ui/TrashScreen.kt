@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -23,8 +24,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -59,22 +60,43 @@ internal fun TrashScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var version by remember { mutableIntStateOf(0) }
-    val items = remember(version) { NoteTrash.list(NoteTrash.root(context)) }
+    var items by remember { mutableStateOf<List<NoteTrash.TrashedNote>?>(null) }
+    var loading by remember { mutableStateOf(true) }
     var clearing by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
-    var deletionFailed by remember { mutableStateOf(false) }
-    val changed = {
-        version++
-        onChanged()
+    var deletionResult by remember { mutableStateOf(NoteTrash.PurgeResult.COMPLETE) }
+    var retryIds by remember { mutableStateOf<List<String>>(emptyList()) }
+    var retryFailed by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        val (result, remaining) = withContext(Dispatchers.IO) {
+            val trash = NoteTrash.root(context)
+            NoteTrash.finishInterruptedDeletions(NoteStore.root(context), trash) to NoteTrash.list(trash)
+        }
+        deletionResult = result
+        items = remaining
+        loading = false
     }
-    fun purge(ids: List<String>? = null) {
+    fun purge(ids: List<String>? = null, retry: Boolean = false) {
         if (deleting) return
         deleting = true
         scope.launch {
-            deletionFailed = !withContext(Dispatchers.IO) { NoteTrash.purge(NoteTrash.root(context), ids) }
+            val (result, remaining, requested) = withContext(Dispatchers.IO) {
+                synchronized(NoteStore) {
+                    val trash = NoteTrash.root(context)
+                    val cleanup = NoteTrash.finishInterruptedDeletions(NoteStore.root(context), trash)
+                    val targets = ids ?: NoteTrash.list(trash)?.map { it.id }
+                    val deleted = targets?.let { NoteTrash.purge(trash, it) } ?: NoteTrash.PurgeResult.INCOMPLETE
+                    Triple(cleanup.combine(deleted), NoteTrash.list(trash), targets.orEmpty())
+                }
+            }
+            // A retry only applies to the failed request, even if more notes have since arrived.
+            val present = remaining?.mapTo(HashSet()) { it.id }
+            retryIds = if (present == null) requested else requested.filter { it in present }
+            deletionResult = result
+            items = remaining
+            retryFailed = retry && (result != NoteTrash.PurgeResult.COMPLETE || remaining == null)
             deleting = false
-            changed()
+            onChanged()
         }
     }
     Scaffold(
@@ -89,7 +111,9 @@ internal fun TrashScreen(
                 },
                 title = { Text(stringResource(R.string.screen_trash)) },
                 actions = {
-                    if (items?.isEmpty() != true) {
+                    if (!loading && (deletionResult != NoteTrash.PurgeResult.COMPLETE || items == null)) {
+                        TextButton(enabled = !deleting, onClick = { purge(retryIds, retry = true) }) { Text(stringResource(R.string.trash_retry)) }
+                    } else if (!items.isNullOrEmpty()) {
                         TextButton(enabled = !deleting, onClick = { clearing = true }) { Text(stringResource(R.string.trash_clear)) }
                     }
                 },
@@ -97,18 +121,26 @@ internal fun TrashScreen(
         },
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
-            if (items?.isEmpty() == true && !deletionFailed) {
+            if (loading) {
+                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center).size(24.dp))
+            } else if (items?.isEmpty() == true && deletionResult == NoteTrash.PurgeResult.COMPLETE) {
                 Text(stringResource(R.string.trash_empty), modifier = Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
                 LazyColumn(contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     item {
-                        val failed = deletionFailed || items == null
-                        Text(
-                            stringResource(if (failed) R.string.trash_delete_failed else R.string.trash_hint),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(4.dp),
-                        )
+                        val message = when {
+                            deletionResult == NoteTrash.PurgeResult.ACCESS_DENIED -> R.string.trash_delete_denied
+                            deletionResult == NoteTrash.PurgeResult.INCOMPLETE || items == null -> R.string.trash_delete_failed
+                            else -> R.string.trash_hint
+                        }
+                        androidx.compose.foundation.text.selection.SelectionContainer {
+                            Text(
+                                if (retryFailed) stringResource(R.string.trash_support) else stringResource(message),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (message != R.string.trash_hint) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(4.dp),
+                            )
+                        }
                     }
                     items(items.orEmpty(), key = { it.id }) { note ->
                         Surface(shape = RoundedCornerShape(ProductTokens.Radius.Card), color = MaterialTheme.colorScheme.surfaceContainerLow) {
@@ -132,16 +164,18 @@ internal fun TrashScreen(
                                         TextButton(enabled = !deleting, onClick = {
                                             deleting = true
                                             scope.launch {
-                                                val restored = withContext(Dispatchers.IO) {
-                                                    NoteTrash.restore(NoteStore.root(context), NoteTrash.root(context), listOf(note.id))
+                                                val (restored, remaining) = withContext(Dispatchers.IO) {
+                                                    val trash = NoteTrash.root(context)
+                                                    NoteTrash.restore(NoteStore.root(context), trash, listOf(note.id)) to NoteTrash.list(trash)
                                                 }
+                                                items = remaining
                                                 deleting = false
                                                 if (restored.isEmpty()) {
                                                     Toast.makeText(context, R.string.trash_restore_failed, Toast.LENGTH_LONG).show()
                                                 } else if (note.unrecognized) {
                                                     runCatching { context.startForegroundService(RecordingService.transcribeIntent(context, note.id)) }
                                                 }
-                                                changed()
+                                                onChanged()
                                             }
                                         }) {
                                             Icon(PhosphorIcons.Regular.ArrowUUpLeft, contentDescription = null, modifier = Modifier.size(16.dp))

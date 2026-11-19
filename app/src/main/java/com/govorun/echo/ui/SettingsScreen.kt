@@ -2,6 +2,7 @@ package com.govorun.echo.ui
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -17,7 +18,6 @@ import com.adamglin.phosphoricons.Regular
 import com.adamglin.phosphoricons.regular.ArrowsClockwise
 import com.adamglin.phosphoricons.regular.Certificate
 import com.adamglin.phosphoricons.regular.CheckCircle
-import com.adamglin.phosphoricons.regular.ClockCountdown
 import com.adamglin.phosphoricons.regular.Database
 import com.adamglin.phosphoricons.regular.GearSix
 import com.adamglin.phosphoricons.regular.Microphone
@@ -53,7 +53,6 @@ import com.product.ui.ProductDivider
 import com.product.ui.ProductSectionItem
 import com.product.ui.ProductSettingsShell
 import com.product.ui.ProductTokens
-import com.product.ui.SettingsInfoRow
 import com.product.ui.SettingsLinkRow
 import com.product.ui.SettingsSection
 import com.product.ui.SettingsSwitchRow
@@ -65,11 +64,8 @@ internal class SettingsState(
     val stamps: Boolean,
     val themeMode: Int,
     val dynamicColors: Boolean,
-    val retentionDays: Int,
-    val noteCount: Int,
-    val usageBytes: Long,
+    val noteIds: Set<String>?,
     val advanced: Boolean,
-    val backup: com.govorun.echo.backup.BackupFolder.Status?,
 )
 
 internal class SettingsActions(
@@ -80,19 +76,16 @@ internal class SettingsActions(
     val onStamps: (Boolean) -> Unit,
     val onTheme: (Int) -> Unit,
     val onDynamicColors: (Boolean) -> Unit,
-    val onRetention: (Int) -> Unit,
-    val onAutoArchive: (Boolean) -> Unit,
+    val onStorageGuide: () -> Unit,
+    val onOpenTrash: () -> Unit,
     val onHelp: () -> Unit,
     val onExportAll: () -> Unit,
-    val onPickBackup: () -> Unit,
-    val onBackupNow: () -> Unit,
-    val onBackupOff: () -> Unit,
-    val onBackupRestore: () -> Unit,
     val onTransfer: () -> Unit,
     val onAddTile: () -> Unit,
     val onOpenCommands: () -> Unit,
     val onUnlockExperiments: () -> Unit,
     val onOpenExperiments: () -> Unit,
+    val onManageFolder: () -> Unit,
     val onOpenJournal: () -> Unit,
     val onOpenLicenses: () -> Unit,
     val onOpenAbout: () -> Unit,
@@ -115,11 +108,8 @@ internal fun SettingsScreen(
     actions: SettingsActions,
 ) {
     var themeSheet by remember { mutableStateOf(false) }
-    var retentionSheet by remember { mutableStateOf(false) }
-    var backupMore by remember { mutableStateOf(false) }
     val themeLabels = mapOf(AppSettings.THEME_SYSTEM to R.string.theme_system, AppSettings.THEME_LIGHT to R.string.theme_light, AppSettings.THEME_DARK to R.string.theme_dark)
     val context = androidx.compose.ui.platform.LocalContext.current
-    val retentionLabel = { days: Int -> if (days == 0) context.getString(R.string.retention_never) else context.getString(R.string.retention_days, days) }
     var tabName by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(SettingsTab.RECORD.name) }
     val tab = SettingsTab.valueOf(tabName)
     val tabs = SettingsTab.entries.map { ProductSectionItem(it, stringResource(it.title), it.icon) }
@@ -169,72 +159,30 @@ internal fun SettingsScreen(
             }
             if (tab == SettingsTab.STORAGE) {
                 item {
-                    HelpSection(stringResource(R.string.settings_storage_title), R.string.help_storage_title, R.string.help_storage) {
-                        SettingsInfoRow(
-                            PhosphorIcons.Regular.Database,
-                            stringResource(R.string.settings_usage_title),
-                            trailing = {
-                                Text(
-                                    stringResource(R.string.settings_usage_value, state.noteCount, formatSize(state.usageBytes)),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            },
-                        )
+                    SettingsSection(stringResource(R.string.settings_storage_title)) {
+                        StorageUsageSetting(state.noteIds, actions.onOpenTrash, actions.onTransfer)
                         ProductDivider()
-                        AutoArchiveSetting(actions.onAutoArchive)
+                        InactiveNotesSetting()
                         ProductDivider()
-                        SettingsLinkRow(
-                            PhosphorIcons.Regular.ClockCountdown,
-                            stringResource(R.string.retention_title),
-                            stringResource(R.string.retention_summary),
-                            value = retentionLabel(state.retentionDays),
-                            onClick = { retentionSheet = true },
-                        )
-                        ProductDivider()
-                        SettingsLinkRow(PhosphorIcons.Regular.DownloadSimple, stringResource(R.string.settings_export_all), stringResource(R.string.settings_export_all_text), onClick = actions.onExportAll)
+                        SettingsLinkRow(PhosphorIcons.Regular.Info, stringResource(R.string.storage_guide_title), onClick = actions.onStorageGuide)
                     }
                 }
             }
             if (tab == SettingsTab.STORAGE) {
                 item {
-                    HelpSection(stringResource(R.string.backup_section), R.string.help_backup_title, R.string.help_backup) {
+                    SettingsSection(stringResource(R.string.backup_section)) {
                         SettingsLinkRow(PhosphorIcons.Regular.Desktop, stringResource(R.string.transfer_title), stringResource(R.string.transfer_short), onClick = actions.onTransfer)
                         ProductDivider()
-                        GoogleBackupRow()
-                        ProductDivider()
-                        val backup = state.backup
-                        if (backup?.folderName != null) {
-                            SettingsInfoRow(
-                                PhosphorIcons.Regular.FolderSimple,
-                                backup.folderName,
-                                stringResource(R.string.backup_copied, backup.copied, backup.total),
-                            )
-                            backup.lastError?.let {
-                                ProductDivider()
-                                SettingsInfoRow(
-                                    PhosphorIcons.Regular.Warning,
-                                    stringResource(R.string.backup_error, when (it) { "no_access" -> stringResource(R.string.backup_no_access); "copy_conflict" -> stringResource(R.string.backup_conflict); else -> stringResource(R.string.backup_write_failed) }),
-                                )
-                            }
+                        SettingsLinkRow(PhosphorIcons.Regular.DownloadSimple, stringResource(R.string.settings_export_all), stringResource(R.string.settings_export_all_text), onClick = actions.onExportAll)
+                        val revision by com.govorun.echo.backup.FolderExports.changes.collectAsState()
+                        if (remember(revision) { com.govorun.echo.backup.FolderExports.lastTree(context) } != null) {
                             ProductDivider()
-                            if (backup.networkReason != null) NetworkNotice(backup.networkReason, Modifier.padding(horizontal = ProductTokens.Spacing.Section))
-                            else SettingsLinkRow(PhosphorIcons.Regular.ArrowsClockwise, stringResource(R.string.backup_now), onClick = actions.onBackupNow)
-                            ProductDivider()
-                            SettingsLinkRow(PhosphorIcons.Regular.DotsThree, stringResource(R.string.backup_more), onClick = { backupMore = !backupMore })
-                            if (backupMore) {
-                                ProductDivider()
-                                SettingsLinkRow(PhosphorIcons.Regular.DownloadSimple, stringResource(R.string.backup_restore), enabled = backup.networkReason == null, onClick = actions.onBackupRestore)
-                                ProductDivider()
-                                SettingsLinkRow(PhosphorIcons.Regular.FolderOpen, stringResource(R.string.backup_change), onClick = actions.onPickBackup)
-                                ProductDivider()
-                                SettingsLinkRow(PhosphorIcons.Regular.XCircle, stringResource(R.string.backup_off), onClick = actions.onBackupOff)
-                            }
-                        } else {
-                            SettingsLinkRow(PhosphorIcons.Regular.FolderSimple, stringResource(R.string.backup_pick), stringResource(R.string.backup_text), onClick = actions.onPickBackup)
+                            SettingsLinkRow(PhosphorIcons.Regular.FolderOpen, stringResource(R.string.folder_manage),
+                                stringResource(if (com.govorun.echo.backup.FolderExports.active(context)) R.string.folder_enabled else R.string.folder_paused), onClick = actions.onManageFolder)
                         }
                     }
                 }
+                item { SettingsSection(stringResource(R.string.android_backup_section)) { GoogleBackupRow() } }
             }
             if (tab == SettingsTab.APP) {
                 item {
@@ -296,16 +244,7 @@ internal fun SettingsScreen(
             onDismissRequest = { themeSheet = false },
         )
     }
-    if (retentionSheet) {
-        ProductChoiceSheet(
-            title = stringResource(R.string.retention_title),
-            selected = state.retentionDays,
-            options = listOf(0, 30, 90, 365),
-            optionLabel = { retentionLabel(it) },
-            onSelected = actions.onRetention,
-            onDismissRequest = { retentionSheet = false },
-        )
-    }
+
 }
 
 @Composable

@@ -47,9 +47,12 @@ class MainActivity : ComponentActivity() {
         // "Отменить" died with the app is confirmed.
         if (savedInstanceState == null)
             Thread {
-                com.govorun.echo.notes.NoteCut.settle(NoteStore.root(this))
+                val notes = NoteStore.root(this)
+                val trash = NoteTrash.root(this)
+                com.govorun.echo.notes.NoteCut.settle(notes)
                 com.govorun.echo.backup.Snapshot.restoreIfEmpty(this)
-                NoteTrash.purgeExpired(NoteTrash.root(this))
+                NoteTrash.finishInterruptedDeletions(notes, trash)
+                NoteTrash.purgeExpired(trash)
                 com.govorun.echo.notes.EmptyNotes.sweepOnce(this)
                 com.govorun.echo.notes.AutoTitles.clearOnce(this)
             }
@@ -92,7 +95,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         com.govorun.echo.export.ExportCache.cleanAsync(this)
         resumes++
-        backupHost.run()
+        com.govorun.echo.backup.BackupFolder.syncAsync(this)
         housekeepOnResume()
     }
 
@@ -137,7 +140,6 @@ class MainActivity : ComponentActivity() {
 
     internal val exporter = NotesExporter(this)
     internal var hotkeyServiceOn by mutableStateOf(false)
-    internal val backupHost = BackupHost(this)
 }
 
 private const val RETURN_FROM_TILE = "com.govorun.echo.RETURN_FROM_TILE"

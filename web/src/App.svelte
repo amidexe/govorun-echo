@@ -263,6 +263,13 @@
     edited = false
   }
 
+  function selectAll() {
+    chosen = new Set(shown.map((note) => note.id))
+    edited = false
+    actionMenu = null
+    return enterPane()
+  }
+
   async function enterPane() {
     returnFocus = document.activeElement
     compactPane = true
@@ -457,7 +464,7 @@
     <NotesList bind:query bind:element={listElement} {scope} {tag} pickedCount={picked.length}
       {shown} {drawn} {chosen} {openId} {fresh} {marked} {icon} {more}
       preview={(n) => snippet(n, words, layersOf)} onSearch={() => (readerDismissed = false)}
-      onEnterPane={enterPane} onClear={() => (chosen = new Set())} onToggle={toggle} onShow={show} />
+      onSelectAll={selectAll} onEnterPane={enterPane} onClear={closePane} onToggle={toggle} onShow={show} />
 
     {#if pane === 'reader'}
       <aside class="pane card" bind:this={paneElement} tabindex="-1" aria-label="Заметка">
@@ -490,7 +497,6 @@
             </div>
           {/if}
           <label class="toggle"><input type="checkbox" bind:checked={withDates} onchange={() => (edited = false)} /> С датами</label>
-          <button class="bare wide-close" onclick={closePane} aria-label="Снять выбор">{@render icon('close', 18)}</button>
         </div>
         <textarea bind:value={draft} oninput={() => (edited = true)} aria-label="Склеенный текст"></textarea>
         <div class="hint">Правки здесь меняют только то, что вы скопируете. Заметки на телефоне остаются как были.</div>
